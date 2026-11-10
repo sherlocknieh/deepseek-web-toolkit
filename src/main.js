@@ -10,12 +10,16 @@ import { disposeRenameEditor } from './editor.js';
 import { cleanupInPlace, removeNewFolderButton, disposeNewFolderEditor, disposeFolderRename } from './render.js';
 import { initKatexCopy } from './katex-copy.js';
 import { initMessageNav } from './message-nav.js';
+import { patchNativeNavBreakpoint } from './native-nav.js';
 
 // 开发热更新可能只重跑入口而不重跑 runtime.js；先回收当前实例再登记本轮清理
 if (runtime.initialized) {
     runtime.dispose();
 }
 runtime.initialized = true;
+
+// 必须在应用读取断点前改写，否则导航已被卸载
+patchNativeNavBreakpoint();
 
 runtime.disposers.push(clearDropHighlight, restoreDisplayTitles, disposeRenameEditor, cleanupInPlace, removeNewFolderButton, disposeNewFolderEditor, disposeFolderRename);
 runtime.refreshSelection = updateSelectedState;
@@ -60,7 +64,12 @@ function main() {
 }
 
 try {
-    main();
+    // document-start 下 head/body 可能还没解析出来，等 DOM 就绪再注入样式和监听
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', main, { once: true });
+    } else {
+        main();
+    }
 } catch (err) {
     console.error('[DeepSeek 工具箱] 初始化失败', err);
 }

@@ -26,6 +26,8 @@ export default defineConfig({
         downloadURL: 'https://github.com/sherlocknieh/deepseek-web-toolkit/raw/main/dist/deepseek-web-toolkit.user.js',
         updateURL: 'https://github.com/sherlocknieh/deepseek-web-toolkit/raw/main/dist/deepseek-web-toolkit.user.js',
         grant: ['GM_setValue', 'GM_getValue'],
+        // 导航断点必须在应用初始化前改写，否则导航已被卸载
+        'run-at': 'document-start',
       },
       build: {
         fileName: 'deepseek-web-toolkit.user.js',

@@ -17,7 +17,10 @@
 
 ## 消息导航要点
 
-- DeepSeek 自带右侧导航，被 `@media not all and (min-width: 768px)` 隐藏且需悬停才展开；脚本在 `src/styles.js` 里覆盖成窄屏常显，并给消息列表补右内边距
+- DeepSeek 自带右侧导航，被 `@media not all and (min-width: 768px)` 隐藏且需悬停才展开；脚本在 `src/styles.js` 里覆盖成全程常显，并给消息列表补右内边距
+- 前端在「宽度 ≤1200px 且侧栏展开」时直接不渲染导航（源码条件 `r.length<2 || (u && h)`），CSS 救不回来；`src/native-nav.js` 在 document-start 改写 `matchMedia('(max-width: 1200px)')` 让它恒为 false，该断点只服务导航
+- 覆盖规则不设断点：断点两侧的媒体查询区间不重合，缩放跨过 768px 时导航会先消失再出现
+- 右内边距用 `max(应用居中留白, 下限)`，下限在 768px 处随列表外边距从 44px 收到 20px 同步从 14px 提到 38px，右侧总留白全程 58px，不会突然变宽
 - 其他站点由 `src/message-nav.js` 启动：只依赖 DOM，用 `[data-message-author-role]`、`user-query`、`model-response`、`message-content`、`article` 识别消息块，向上找装有多条消息的最高可滚动区块作为容器
 - 角色优先读标记，读不到时按提问/回答交替推断；圆点高亮跟随滚动，跳转后短暂高亮目标消息
 - 消息少于 3 条时整体隐藏；SPA 切会话靠 700ms 地址栏轮询重新识别

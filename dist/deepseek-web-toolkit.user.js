@@ -16,6 +16,7 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        unsafeWindow
+// @run-at       document-start
 // ==/UserScript==
 
 (function() {
@@ -429,15 +430,23 @@
             to { background-color: transparent; }
         }
 
-        /* 原生消息导航在 768px 以下被前端设成 display:none，宽屏也要悬停才露出。
-           窄屏没有悬停，只能常显；同时给消息列表补右内边距，避免导航压住正文 */
-        @media (max-width: 767px) {
-            [style*="--scroll-nav-page-padding"] {
-                display: flex !important;
-            }
+        /* 原生消息导航被前端在 768px 以下设成 display:none，宽屏也要悬停才露出。
+           这里不设断点、全程常显：断点两侧的媒体查询区间不重合，缩放跨过 768px
+           时会先消失再出现 */
+        [style*="--scroll-nav-page-padding"] {
+            display: flex !important;
+        }
 
-            .ds-virtual-list-items {
-                padding-right: 48px !important;
+        /* 窄屏给消息列表补右内边距，避开导航。应用在 768px 处把列表外边距从 44px
+           收到 20px，这里把下限同步从 14px 提到 38px，右侧总留白全程都是 58px，
+           缩放跨断点不再突然变宽 */
+        .ds-virtual-list--printable .ds-virtual-list-items {
+            padding-right: max(calc((100% - var(--message-list-max-width)) / 2), 14px) !important;
+        }
+
+        @media not all and (min-width: 768px) {
+            .ds-virtual-list--printable .ds-virtual-list-items {
+                padding-right: max(calc((100% - var(--message-list-max-width)) / 2), 38px) !important;
             }
         }
     `;
@@ -2156,8 +2165,39 @@
 		state.signature = "";
 		if (runtime.refreshMessageNav === refreshMessageNav) runtime.refreshMessageNav = null;
 	}
+	var NARROW_QUERY = "(max-width: 1200px)";
+	var PATCH_FLAG = "__dscf_native_nav_patched__";
+	function normalize(query) {
+		return String(query).replace(/\s+/g, "").toLowerCase();
+	}
+	function createNeverMatch(query) {
+		return {
+			matches: false,
+			media: query,
+			onchange: null,
+			addListener() {},
+			removeListener() {},
+			addEventListener() {},
+			removeEventListener() {},
+			dispatchEvent() {
+				return false;
+			}
+		};
+	}
+	function patchNativeNavBreakpoint() {
+		const pageWindow = typeof unsafeWindow !== "undefined" && unsafeWindow ? unsafeWindow : window;
+		if (pageWindow[PATCH_FLAG]) return;
+		const original = pageWindow.matchMedia.bind(pageWindow);
+		const target = normalize(NARROW_QUERY);
+		pageWindow.matchMedia = function(query) {
+			if (normalize(query) === target) return createNeverMatch(query);
+			return original(query);
+		};
+		pageWindow[PATCH_FLAG] = true;
+	}
 	if (runtime.initialized) runtime.dispose();
 	runtime.initialized = true;
+	patchNativeNavBreakpoint();
 	runtime.disposers.push(clearDropHighlight, restoreDisplayTitles, disposeRenameEditor, cleanupInPlace, removeNewFolderButton, disposeNewFolderEditor, disposeFolderRename);
 	runtime.refreshSelection = updateSelectedState;
 	runtime.rebuild = rebuild;
@@ -2192,7 +2232,8 @@
 		});
 	}
 	try {
-		main();
+		if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", main, { once: true });
+		else main();
 	} catch (err) {
 		console.error("[DeepSeek 工具箱] 初始化失败", err);
 	}

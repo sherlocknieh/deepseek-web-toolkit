@@ -22,6 +22,7 @@ npm run release --dry-run      # 只预览版本号
 | --- | --- |
 | `main.js` | 入口、启动顺序、热更新清理登记 |
 | `katex-copy.js` | 注入 KaTeX copy-tex，与目录功能无依赖 |
+| `native-nav.js` | 改写原生导航的 `(max-width: 1200px)` 断点，避免侧栏展开时导航被卸载 |
 | `message-nav.js` | 通用消息导航：右侧圆点 + 完整列表；DeepSeek 不启用 |
 | `runtime.js` | 运行时状态、上一实例回收、页面 window |
 | `constants.js` | 键名、缩进、布局 data 属性名 |
@@ -76,11 +77,11 @@ npm run release --dry-run      # 只预览版本号
 - 显示标题 → `titles.js`
 - 拖动/放置 → `drag.js`；置顶 `pin.js`；改名 `api.js`
 - 展开持久化 → `storage.js` + `constants.js`
-- 通用消息导航 → `message-nav.js`；原生导航窄屏显示 → `styles.js`
+- 通用消息导航 → `message-nav.js`；原生导航显隐 → `native-nav.js` + `styles.js`
 - DeepSeek 前端更新 → `dom.js` + `checkFrontUpdating`
 - 新增交互状态 → `runtime.js` + `runtime.disposers`
 - 发布流程 → `scripts/*` + `.githooks/pre-commit`
-- 消息导航 → `message-nav.js`：非 DeepSeek 站点在 `main.js` 启动；DeepSeek 只在 `styles.js` 覆盖原生导航的窄屏显示
+- 消息导航 → `message-nav.js`：非 DeepSeek 站点在 `main.js` 启动；DeepSeek 用原生导航，`native-nav.js` 改写 `(max-width: 1200px)` 断点避免侧栏展开时被卸载，`styles.js` 负责常显与留白
 
 ## 浏览器调试
 
@@ -107,4 +108,4 @@ cp -a "$SRC/Default/Local Storage" "$DST/Default/Local Storage"
 
 - 构建：`npm run build`；发布：`npm run release "feat: …"`（钩子走同一套升版本+构建，发布脚本用 `--no-verify` 跳过）。
 - 真机：控制台出现 `[DeepSeek 工具箱] 脚本已加载` 和 `已初始化，会话数 N`；确认只有置顶区成目录、叶子只显示末段、未置顶斜杠会话平铺、拖动/置顶/改名可用、新建与删除空目录正常。
-- 确认窄屏（<768px）右侧原生消息导航常显且不压正文；其他站点出现圆点列，点击可跳转，按钮可展开列表。
+- 确认右侧原生消息导航全程常显且不压正文，缩放跨过 768px 时导航不闪、右边距不跳变；其他站点出现圆点列，点击可跳转，按钮可展开列表。
