@@ -23,6 +23,7 @@ export const runtime = {
     pinning: new Set(),
     disposers: [],
     refreshSelection: null,
+    refreshMessageNav: null,
     rebuild: null,
     initialized: false,
     dispose: null

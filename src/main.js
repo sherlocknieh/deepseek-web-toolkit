@@ -9,6 +9,7 @@ import { restoreDisplayTitles } from './titles.js';
 import { disposeRenameEditor } from './editor.js';
 import { cleanupInPlace, removeNewFolderButton, disposeNewFolderEditor, disposeFolderRename } from './render.js';
 import { initKatexCopy } from './katex-copy.js';
+import { initMessageNav } from './message-nav.js';
 
 // 开发热更新可能只重跑入口而不重跑 runtime.js；先回收当前实例再登记本轮清理
 if (runtime.initialized) {
@@ -20,7 +21,6 @@ runtime.disposers.push(clearDropHighlight, restoreDisplayTitles, disposeRenameEd
 runtime.refreshSelection = updateSelectedState;
 runtime.rebuild = rebuild;
 
-
 // 检测 DeepSeek 前端结构是否变化；变化时只提示不执行，避免脚本报错刷屏
 function checkFrontUpdating() {
     const criticalClasses = ['cb86951c', 'dc04ec1d', '_546d736', 'ds-scroll-area'];
@@ -28,11 +28,21 @@ function checkFrontUpdating() {
 }
 
 
+const isDeepSeek = location.hostname === 'chat.deepseek.com';
+
 // 入口：先修好公式复制，再等侧栏出现会话后原地重排一次，并开始监听变化
 function main() {
-    console.log('[DeepSeek 工具箱] 脚本已加载，等待会话列表…');
     addCSSClass();
     initKatexCopy();
+
+    // 会话目录依赖 DeepSeek 侧栏结构，其他站点只启用消息导航
+    if (!isDeepSeek) {
+        console.log('[DeepSeek 工具箱] 脚本已加载（消息导航）');
+        initMessageNav();
+        return;
+    }
+
+    console.log('[DeepSeek 工具箱] 脚本已加载，等待会话列表…');
 
     waitFor(() => getOriginalAnchors().length > 0, () => {
         if (checkFrontUpdating()) {

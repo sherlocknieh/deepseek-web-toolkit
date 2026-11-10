@@ -11,10 +11,16 @@ export default defineConfig({
       userscript: {
         name: 'DeepSeek 网页端工具箱 - LaTeX 公式复制 & 会话文件夹 & 消息导航',
         namespace: 'http://tampermonkey.net/',
-        version: '2026.11.10.1642',
+        version: '2026.11.10.1743',
         description: '增强 DeepSeek 网页端使用体验: 会话文件夹 + 消息导航 + KaTeX 公式复制修正。',
         author: 'sherlocknieh',
-        match: ['https://chat.deepseek.com/*'],
+        match: [
+            'https://chat.deepseek.com/*',
+            'https://chatgpt.com/*',
+            'https://chat.openai.com/*',
+            'https://gemini.google.com/*',
+            'https://grok.com/*'
+        ],
         icon: 'https://www.deepseek.com/favicon.ico',
         license: 'MIT',
         downloadURL: 'https://github.com/sherlocknieh/deepseek-web-toolkit/raw/main/dist/deepseek-web-toolkit.user.js',

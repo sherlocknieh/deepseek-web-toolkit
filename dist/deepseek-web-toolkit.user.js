@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 网页端工具箱 - LaTeX 公式复制 & 会话文件夹 & 消息导航
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.10.1642
+// @version      2026.11.10.1743
 // @author       sherlocknieh
 // @description  增强 DeepSeek 网页端使用体验: 会话文件夹 + 消息导航 + KaTeX 公式复制修正。
 // @license      MIT
@@ -9,6 +9,10 @@
 // @downloadURL  https://github.com/sherlocknieh/deepseek-web-toolkit/raw/main/dist/deepseek-web-toolkit.user.js
 // @updateURL    https://github.com/sherlocknieh/deepseek-web-toolkit/raw/main/dist/deepseek-web-toolkit.user.js
 // @match        https://chat.deepseek.com/*
+// @match        https://chatgpt.com/*
+// @match        https://chat.openai.com/*
+// @match        https://gemini.google.com/*
+// @match        https://grok.com/*
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        unsafeWindow
@@ -36,6 +40,7 @@
 		pinning: new Set(),
 		disposers: [],
 		refreshSelection: null,
+		refreshMessageNav: null,
 		rebuild: null,
 		initialized: false,
 		dispose: null
@@ -240,6 +245,200 @@
 
         .dscf-drop-root {
             box-shadow: inset 0 0 0 1.5px rgba(103, 112, 254, 0.55);
+        }
+
+        /* 通用消息导航（其他站点用；DeepSeek 走原生导航）：右侧圆点常驻，按钮展开完整列表 */
+        .dscf-msgnav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 400px;
+            display: none;
+            align-items: flex-start;
+            z-index: 40;
+            pointer-events: none;
+            color: var(--dscf-fg, #1f2329);
+        }
+
+        .dscf-msgnav.is-visible {
+            display: flex;
+        }
+
+        .dscf-msgnav-side {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            pointer-events: auto;
+        }
+
+        .dscf-msgnav-toggle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 20px;
+            width: 20px;
+            height: 20px;
+            padding: 0;
+            border: 0;
+            border-radius: 50%;
+            background: transparent;
+            color: inherit;
+            font-size: 11px;
+            cursor: pointer;
+            opacity: 0.55;
+            transition: opacity 0.15s ease, color 0.15s ease;
+        }
+
+        .dscf-msgnav-toggle:hover,
+        .dscf-msgnav-toggle.is-active {
+            opacity: 1;
+            color: #6770FE;
+        }
+
+        .dscf-msgnav-rail {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            max-height: 100%;
+            overflow: hidden;
+        }
+
+        .dscf-msgnav-dot {
+            flex: 0 0 auto;
+            width: 6px;
+            height: 6px;
+            padding: 0;
+            border: 0;
+            border-radius: 999px;
+            background: currentColor;
+            opacity: 0.22;
+            cursor: pointer;
+            transition: opacity 0.15s ease, background-color 0.15s ease, width 0.15s ease;
+        }
+
+        .dscf-msgnav-dot:hover {
+            opacity: 0.7;
+        }
+
+        .dscf-msgnav-dot.is-active {
+            background: #6770FE;
+            opacity: 1;
+            width: 10px !important;
+        }
+
+        /* 面板绝对定位到圆点左侧，避免被视口右缘裁掉 */
+        .dscf-msgnav-panel {
+            position: absolute;
+            top: 0;
+            right: calc(100% + 8px);
+            pointer-events: auto;
+            display: flex;
+            flex-direction: column;
+            width: 300px;
+            max-height: min(60vh, var(--dscf-msgnav-height, 400px));
+            border-radius: 12px;
+            background: var(--dscf-panel-bg, rgba(255, 255, 255, 0.98));
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
+            border: 1px solid rgba(127, 127, 127, 0.16);
+            overflow: hidden;
+        }
+
+        .dscf-msgnav-panel[hidden] {
+            display: none;
+        }
+
+        .dscf-msgnav-head {
+            flex: 0 0 auto;
+            padding: 10px 12px 6px;
+            font-size: 12px;
+            font-weight: 600;
+            opacity: 0.6;
+        }
+
+        .dscf-msgnav-list {
+            flex: 1 1 auto;
+            overflow-y: auto;
+            padding: 0 6px 8px;
+        }
+
+        .dscf-msgnav-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            width: 100%;
+            padding: 7px 8px;
+            border: 0;
+            border-radius: 8px;
+            background: transparent;
+            color: inherit;
+            font: inherit;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .dscf-msgnav-item:hover {
+            background: rgba(103, 112, 254, 0.10);
+        }
+
+        .dscf-msgnav-item.is-active {
+            background: rgba(103, 112, 254, 0.16);
+        }
+
+        .dscf-msgnav-item > i {
+            flex: 0 0 12px;
+            margin-top: 4px;
+            font-size: 10px;
+            opacity: 0.55;
+            text-align: center;
+        }
+
+        .dscf-msgnav-text {
+            flex: 1 1 auto;
+            min-width: 0;
+            font-size: 12px;
+            line-height: 1.5;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .dscf-msgnav-index {
+            flex: 0 0 auto;
+            font-size: 10px;
+            opacity: 0.4;
+            margin-top: 2px;
+        }
+
+        /* 深色主题跟随应用 body 上的 dark 标记 */
+        body.dark .dscf-msgnav {
+            --dscf-fg: #e6e8eb;
+            --dscf-panel-bg: rgba(38, 40, 44, 0.98);
+        }
+
+        /* 跳转目标短暂高亮 */
+        [data-dscf-flash] {
+            border-radius: 8px;
+            animation: dscf-flash 1.6s ease-out;
+        }
+
+        @keyframes dscf-flash {
+            from { background-color: rgba(103, 112, 254, 0.22); }
+            to { background-color: transparent; }
+        }
+
+        /* 原生消息导航在 768px 以下被前端设成 display:none，宽屏也要悬停才露出。
+           窄屏没有悬停，只能常显；同时给消息列表补右内边距，避免导航压住正文 */
+        @media (max-width: 767px) {
+            [style*="--scroll-nav-page-padding"] {
+                display: flex !important;
+            }
+
+            .ds-virtual-list-items {
+                padding-right: 48px !important;
+            }
         }
     `;
 		document.head.appendChild(style);
@@ -658,7 +857,10 @@
 		if (visibleRows.length) visibleRows[visibleRows.length - 1].classList.add(selectedClass);
 	}
 	function listenDomain() {
-		runtime.onRouteChange = () => updateSelectedState();
+		runtime.onRouteChange = () => {
+			updateSelectedState();
+			runtime.refreshMessageNav?.();
+		};
 		window.addEventListener("popstate", runtime.onRouteChange);
 		window.addEventListener("hashchange", runtime.onRouteChange);
 		if (!window.__dscfHistoryPatched) {
@@ -668,6 +870,7 @@
 				history[fn] = function(...args) {
 					const ret = orig.apply(this, args);
 					window[RUNTIME_KEY]?.refreshSelection?.();
+					window[RUNTIME_KEY]?.refreshMessageNav?.();
 					return ret;
 				};
 			});
@@ -1385,7 +1588,7 @@
 		}
 		return key;
 	}
-	function makeSignature(anchors) {
+	function makeSignature$1(anchors) {
 		const parents = [];
 		return anchors.map((anchor) => {
 			let parentIndex = parents.indexOf(anchor.parentElement);
@@ -1405,7 +1608,7 @@
 		const anchors = getOriginalAnchors();
 		syncTitleOverrides(anchors);
 		detectUnpinnedFolderRename(anchors);
-		const signature = makeSignature(anchors);
+		const signature = makeSignature$1(anchors);
 		if (!force && !editorRecreated && signature === lastSignature) return;
 		lastSignature = signature;
 		renderInPlace(anchors, () => rebuild(true));
@@ -1591,6 +1794,368 @@
 		script.defer = true;
 		document.head.appendChild(script);
 	}
+	var NAV_ATTR = "data-dscf-msgnav";
+	var FLASH_MS = 1600;
+	var MIN_ENTRIES = 3;
+	var MESSAGE_SELECTOR = [
+		"[data-message-author-role]",
+		"user-query",
+		"model-response",
+		"message-content",
+		"article"
+	].join(",");
+	var state = {
+		scroller: null,
+		entries: [],
+		signature: "",
+		root: null,
+		rail: null,
+		dots: [],
+		toggle: null,
+		panel: null,
+		list: null,
+		rows: [],
+		open: false,
+		activeKey: null,
+		observer: null,
+		onScroll: null,
+		historyTimer: null,
+		href: location.href,
+		refreshTimer: null,
+		watchTimer: null,
+		layoutFrame: 0,
+		flashing: new Map()
+	};
+	function readText(el) {
+		const clone = el.cloneNode(true);
+		clone.querySelectorAll("button, svg, [aria-hidden=\"true\"], nav, form").forEach((node) => node.remove());
+		return (clone.textContent || "").replace(/\s+/g, " ").trim();
+	}
+	function detectRole(el, index) {
+		const author = el.getAttribute("data-message-author-role");
+		if (author === "user") return "USER";
+		if (author === "assistant") return "ASSISTANT";
+		const tag = el.tagName.toLowerCase();
+		if (tag === "user-query") return "USER";
+		if (tag === "model-response") return "ASSISTANT";
+		return index % 2 === 0 ? "USER" : "ASSISTANT";
+	}
+	function getMessageBlocks() {
+		return Array.from(document.querySelectorAll(MESSAGE_SELECTOR)).filter((el) => el.getClientRects().length > 0);
+	}
+	function resolveScroller(blocks) {
+		let best = null;
+		let bestHeight = 0;
+		let node = blocks[0]?.parentElement;
+		while (node && node !== document.body) {
+			const style = getComputedStyle(node);
+			if (/(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 40) {
+				if (blocks.filter((block) => node.contains(block)).length >= 2 && node.scrollHeight > bestHeight) {
+					best = node;
+					bestHeight = node.scrollHeight;
+				}
+			}
+			node = node.parentElement;
+		}
+		return best || Array.from(document.querySelectorAll("*")).filter((el) => {
+			const style = getComputedStyle(el);
+			return /(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 200;
+		}).sort((a, b) => b.scrollHeight - a.scrollHeight)[0] || null;
+	}
+	function readEntries() {
+		return getMessageBlocks().map((el, index) => ({
+			key: String(index),
+			el,
+			role: detectRole(el, index),
+			text: readText(el)
+		}));
+	}
+	function makeSignature(entries) {
+		return entries.map((entry) => entry.key + ":" + entry.text.slice(0, 12)).join("|");
+	}
+	function isUserEntry(entry) {
+		return entry.role === "USER";
+	}
+	function findBlock(entry) {
+		if (entry.el && entry.el.isConnected) return entry.el;
+		return getMessageBlocks()[Number(entry.key)] || null;
+	}
+	function jumpTo(entry) {
+		const block = findBlock(entry);
+		if (!block) return;
+		block.scrollIntoView({
+			behavior: "smooth",
+			block: "start"
+		});
+		flashEntry(block);
+		setActive(entry.key);
+		closePanel();
+	}
+	function flashEntry(block) {
+		clearTimeout(state.flashing.get(block));
+		block.setAttribute("data-dscf-flash", "1");
+		const timer = setTimeout(() => block.removeAttribute("data-dscf-flash"), FLASH_MS);
+		state.flashing.set(block, timer);
+	}
+	function updateActive() {
+		if (!state.entries.length || !state.scroller) return;
+		const limit = state.scroller.getBoundingClientRect().top + 96;
+		let key = state.entries[0].key;
+		for (const entry of state.entries) {
+			const block = findBlock(entry);
+			if (block && block.getBoundingClientRect().top <= limit) key = entry.key;
+		}
+		setActive(key);
+	}
+	function setActive(key) {
+		if (state.activeKey === key) return;
+		state.activeKey = key;
+		state.dots.forEach((dot) => dot.classList.toggle("is-active", dot.dataset.key === key));
+		state.rows.forEach((row) => row.classList.toggle("is-active", row.dataset.key === key));
+	}
+	function scheduleLayout() {
+		cancelAnimationFrame(state.layoutFrame);
+		state.layoutFrame = requestAnimationFrame(() => {
+			updateLayout();
+			updateRailSpacing();
+		});
+	}
+	function updateLayout() {
+		const scroller = state.scroller;
+		const root = state.root;
+		if (!scroller || !root) return;
+		const rect = scroller.getBoundingClientRect();
+		const left = Math.min(rect.right, window.innerWidth) - 36;
+		const top = Math.max(rect.top + 48, 0);
+		const height = Math.max(160, rect.height - 120);
+		root.style.left = `${Math.round(left)}px`;
+		root.style.top = `${Math.round(top)}px`;
+		root.style.height = `${Math.round(height)}px`;
+		root.style.setProperty("--dscf-msgnav-height", `${Math.round(height)}px`);
+	}
+	function updateRailSpacing() {
+		if (!state.rail) return;
+		const count = state.entries.length;
+		const height = parseFloat(getComputedStyle(state.root).getPropertyValue("--dscf-msgnav-height")) || 0;
+		const slot = count ? height / count : 0;
+		const size = Math.max(2, Math.min(6, slot * .6));
+		const gap = Math.max(0, Math.min(8, slot - size));
+		state.rail.style.gap = `${Math.round(gap * 10) / 10}px`;
+		state.dots.forEach((dot) => {
+			dot.style.height = `${Math.round(size * 10) / 10}px`;
+			dot.style.width = `${Math.round(Math.max(2, size) * 10) / 10}px`;
+		});
+	}
+	function ensureDom() {
+		if (state.root) return;
+		const root = document.createElement("div");
+		root.className = "dscf-msgnav";
+		root.setAttribute(NAV_ATTR, "1");
+		const side = document.createElement("div");
+		side.className = "dscf-msgnav-side";
+		const toggle = document.createElement("button");
+		toggle.type = "button";
+		toggle.className = "dscf-msgnav-toggle";
+		toggle.title = "消息导航";
+		toggle.innerHTML = "<i class=\"fa-solid fa-list-ul\"></i>";
+		toggle.addEventListener("click", togglePanel);
+		const rail = document.createElement("div");
+		rail.className = "dscf-msgnav-rail";
+		const panel = document.createElement("div");
+		panel.className = "dscf-msgnav-panel";
+		panel.hidden = true;
+		const head = document.createElement("div");
+		head.className = "dscf-msgnav-head";
+		const list = document.createElement("div");
+		list.className = "dscf-msgnav-list";
+		panel.append(head, list);
+		side.append(toggle, rail);
+		root.append(side, panel);
+		document.body.appendChild(root);
+		state.root = root;
+		state.rail = rail;
+		state.toggle = toggle;
+		state.panel = panel;
+		state.list = list;
+		document.addEventListener("mousedown", onDocumentMouseDown, true);
+		document.addEventListener("keydown", onDocumentKeyDown, true);
+		window.addEventListener("resize", scheduleLayout);
+	}
+	function onDocumentMouseDown(event) {
+		if (!state.open) return;
+		if (state.root && state.root.contains(event.target)) return;
+		closePanel();
+	}
+	function onDocumentKeyDown(event) {
+		if (event.key === "Escape" && state.open) closePanel();
+	}
+	function renderRail() {
+		ensureDom();
+		state.dots.forEach((dot) => dot.remove());
+		state.dots = state.entries.map((entry) => {
+			const dot = document.createElement("button");
+			dot.type = "button";
+			dot.className = "dscf-msgnav-dot";
+			dot.classList.toggle("is-active", entry.key === state.activeKey);
+			dot.dataset.key = entry.key;
+			dot.title = `${isUserEntry(entry) ? "我" : "回答"}：${entry.text || "（无正文）"}`.slice(0, 120);
+			dot.addEventListener("click", () => jumpTo(entry));
+			state.rail.appendChild(dot);
+			return dot;
+		});
+		state.toggle.classList.toggle("is-active", state.open);
+	}
+	function renderList() {
+		ensureDom();
+		state.rows.forEach((row) => row.remove());
+		state.rows = state.entries.map((entry, index) => {
+			const row = document.createElement("button");
+			row.type = "button";
+			row.className = "dscf-msgnav-item";
+			row.classList.toggle("is-active", entry.key === state.activeKey);
+			row.dataset.key = entry.key;
+			const icon = document.createElement("i");
+			icon.className = isUserEntry(entry) ? "fa-solid fa-user" : "fa-solid fa-robot";
+			const text = document.createElement("span");
+			text.className = "dscf-msgnav-text";
+			text.textContent = entry.text || "（无正文）";
+			text.title = entry.text || "";
+			const badge = document.createElement("span");
+			badge.className = "dscf-msgnav-index";
+			badge.textContent = String(index + 1);
+			row.append(icon, text, badge);
+			row.addEventListener("click", () => jumpTo(entry));
+			state.list.appendChild(row);
+			return row;
+		});
+		state.panel.querySelector(".dscf-msgnav-head").textContent = `消息导航 · ${state.entries.length}`;
+	}
+	function syncVisibility() {
+		if (!state.root) return;
+		const visible = state.entries.length >= MIN_ENTRIES;
+		state.root.classList.toggle("is-visible", visible);
+		if (!visible && state.open) closePanel();
+	}
+	function togglePanel() {
+		if (state.open) {
+			closePanel();
+			return;
+		}
+		state.open = true;
+		state.panel.hidden = false;
+		state.toggle.classList.add("is-active");
+		state.rows.find((row) => row.dataset.key === state.activeKey)?.scrollIntoView({ block: "nearest" });
+	}
+	function closePanel() {
+		state.open = false;
+		state.toggle?.classList.remove("is-active");
+		if (state.panel) state.panel.hidden = true;
+	}
+	function attachScroller(scroller) {
+		detachScroller();
+		state.scroller = scroller;
+		state.onScroll = () => {
+			updateActive();
+			scheduleLayout();
+		};
+		scroller.addEventListener("scroll", state.onScroll, { passive: true });
+		state.observer = new MutationObserver(scheduleRefresh);
+		state.observer.observe(scroller, {
+			childList: true,
+			subtree: true
+		});
+		scheduleLayout();
+	}
+	function detachScroller() {
+		if (state.scroller && state.onScroll) state.scroller.removeEventListener("scroll", state.onScroll);
+		state.observer?.disconnect();
+		state.observer = null;
+		state.scroller = null;
+		state.onScroll = null;
+	}
+	function scheduleRefresh() {
+		clearTimeout(state.refreshTimer);
+		state.refreshTimer = setTimeout(() => refreshMessageNav(), 300);
+	}
+	function refreshMessageNav() {
+		const entries = readEntries();
+		if (entries.length < MIN_ENTRIES) {
+			state.entries = entries;
+			state.signature = "";
+			syncVisibility();
+			return;
+		}
+		const scroller = resolveScroller(entries.map((entry) => entry.el));
+		if (!scroller) {
+			syncVisibility();
+			return;
+		}
+		if (scroller !== state.scroller) attachScroller(scroller);
+		const signature = makeSignature(entries);
+		if (signature === state.signature) {
+			syncVisibility();
+			scheduleLayout();
+			updateActive();
+			return;
+		}
+		state.signature = signature;
+		state.entries = entries;
+		renderRail();
+		renderList();
+		syncVisibility();
+		updateLayout();
+		updateRailSpacing();
+		updateActive();
+	}
+	function scheduleWatch() {
+		clearInterval(state.watchTimer);
+		state.watchTimer = setInterval(() => {
+			if (readEntries().length < MIN_ENTRIES) return;
+			clearInterval(state.watchTimer);
+			state.watchTimer = null;
+			refreshMessageNav();
+		}, 800);
+	}
+	function initMessageNav() {
+		ensureDom();
+		state.historyTimer = setInterval(() => {
+			if (location.href === state.href) return;
+			state.href = location.href;
+			scheduleRefresh();
+		}, 700);
+		runtime.refreshMessageNav = refreshMessageNav;
+		runtime.disposers.push(teardownMessageNav);
+		refreshMessageNav();
+		if (readEntries().length < MIN_ENTRIES) scheduleWatch();
+	}
+	function teardownMessageNav() {
+		detachScroller();
+		clearTimeout(state.refreshTimer);
+		state.refreshTimer = null;
+		clearInterval(state.watchTimer);
+		state.watchTimer = null;
+		clearInterval(state.historyTimer);
+		state.historyTimer = null;
+		cancelAnimationFrame(state.layoutFrame);
+		state.flashing.forEach((timer) => clearTimeout(timer));
+		state.flashing.clear();
+		document.removeEventListener("mousedown", onDocumentMouseDown, true);
+		document.removeEventListener("keydown", onDocumentKeyDown, true);
+		window.removeEventListener("resize", scheduleLayout);
+		state.root?.remove();
+		state.root = null;
+		state.rail = null;
+		state.toggle = null;
+		state.panel = null;
+		state.list = null;
+		state.dots = [];
+		state.rows = [];
+		state.open = false;
+		state.entries = [];
+		state.activeKey = null;
+		state.signature = "";
+		if (runtime.refreshMessageNav === refreshMessageNav) runtime.refreshMessageNav = null;
+	}
 	if (runtime.initialized) runtime.dispose();
 	runtime.initialized = true;
 	runtime.disposers.push(clearDropHighlight, restoreDisplayTitles, disposeRenameEditor, cleanupInPlace, removeNewFolderButton, disposeNewFolderEditor, disposeFolderRename);
@@ -1604,10 +2169,16 @@
 			"ds-scroll-area"
 		].some((className) => !document.querySelector(`.${className}`));
 	}
+	var isDeepSeek = location.hostname === "chat.deepseek.com";
 	function main() {
-		console.log("[DeepSeek 工具箱] 脚本已加载，等待会话列表…");
 		addCSSClass();
 		initKatexCopy();
+		if (!isDeepSeek) {
+			console.log("[DeepSeek 工具箱] 脚本已加载（消息导航）");
+			initMessageNav();
+			return;
+		}
+		console.log("[DeepSeek 工具箱] 脚本已加载，等待会话列表…");
 		waitFor(() => getOriginalAnchors().length > 0, () => {
 			if (checkFrontUpdating()) {
 				console.warn("Deepseek 前端已更新，会话目录暂不生效（公式复制不受影响）。");

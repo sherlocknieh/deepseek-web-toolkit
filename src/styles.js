@@ -167,6 +167,200 @@ export function addCSSClass() {
         .dscf-drop-root {
             box-shadow: inset 0 0 0 1.5px rgba(103, 112, 254, 0.55);
         }
+
+        /* 通用消息导航（其他站点用；DeepSeek 走原生导航）：右侧圆点常驻，按钮展开完整列表 */
+        .dscf-msgnav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 400px;
+            display: none;
+            align-items: flex-start;
+            z-index: 40;
+            pointer-events: none;
+            color: var(--dscf-fg, #1f2329);
+        }
+
+        .dscf-msgnav.is-visible {
+            display: flex;
+        }
+
+        .dscf-msgnav-side {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            pointer-events: auto;
+        }
+
+        .dscf-msgnav-toggle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 20px;
+            width: 20px;
+            height: 20px;
+            padding: 0;
+            border: 0;
+            border-radius: 50%;
+            background: transparent;
+            color: inherit;
+            font-size: 11px;
+            cursor: pointer;
+            opacity: 0.55;
+            transition: opacity 0.15s ease, color 0.15s ease;
+        }
+
+        .dscf-msgnav-toggle:hover,
+        .dscf-msgnav-toggle.is-active {
+            opacity: 1;
+            color: #6770FE;
+        }
+
+        .dscf-msgnav-rail {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            max-height: 100%;
+            overflow: hidden;
+        }
+
+        .dscf-msgnav-dot {
+            flex: 0 0 auto;
+            width: 6px;
+            height: 6px;
+            padding: 0;
+            border: 0;
+            border-radius: 999px;
+            background: currentColor;
+            opacity: 0.22;
+            cursor: pointer;
+            transition: opacity 0.15s ease, background-color 0.15s ease, width 0.15s ease;
+        }
+
+        .dscf-msgnav-dot:hover {
+            opacity: 0.7;
+        }
+
+        .dscf-msgnav-dot.is-active {
+            background: #6770FE;
+            opacity: 1;
+            width: 10px !important;
+        }
+
+        /* 面板绝对定位到圆点左侧，避免被视口右缘裁掉 */
+        .dscf-msgnav-panel {
+            position: absolute;
+            top: 0;
+            right: calc(100% + 8px);
+            pointer-events: auto;
+            display: flex;
+            flex-direction: column;
+            width: 300px;
+            max-height: min(60vh, var(--dscf-msgnav-height, 400px));
+            border-radius: 12px;
+            background: var(--dscf-panel-bg, rgba(255, 255, 255, 0.98));
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
+            border: 1px solid rgba(127, 127, 127, 0.16);
+            overflow: hidden;
+        }
+
+        .dscf-msgnav-panel[hidden] {
+            display: none;
+        }
+
+        .dscf-msgnav-head {
+            flex: 0 0 auto;
+            padding: 10px 12px 6px;
+            font-size: 12px;
+            font-weight: 600;
+            opacity: 0.6;
+        }
+
+        .dscf-msgnav-list {
+            flex: 1 1 auto;
+            overflow-y: auto;
+            padding: 0 6px 8px;
+        }
+
+        .dscf-msgnav-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            width: 100%;
+            padding: 7px 8px;
+            border: 0;
+            border-radius: 8px;
+            background: transparent;
+            color: inherit;
+            font: inherit;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .dscf-msgnav-item:hover {
+            background: rgba(103, 112, 254, 0.10);
+        }
+
+        .dscf-msgnav-item.is-active {
+            background: rgba(103, 112, 254, 0.16);
+        }
+
+        .dscf-msgnav-item > i {
+            flex: 0 0 12px;
+            margin-top: 4px;
+            font-size: 10px;
+            opacity: 0.55;
+            text-align: center;
+        }
+
+        .dscf-msgnav-text {
+            flex: 1 1 auto;
+            min-width: 0;
+            font-size: 12px;
+            line-height: 1.5;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .dscf-msgnav-index {
+            flex: 0 0 auto;
+            font-size: 10px;
+            opacity: 0.4;
+            margin-top: 2px;
+        }
+
+        /* 深色主题跟随应用 body 上的 dark 标记 */
+        body.dark .dscf-msgnav {
+            --dscf-fg: #e6e8eb;
+            --dscf-panel-bg: rgba(38, 40, 44, 0.98);
+        }
+
+        /* 跳转目标短暂高亮 */
+        [data-dscf-flash] {
+            border-radius: 8px;
+            animation: dscf-flash 1.6s ease-out;
+        }
+
+        @keyframes dscf-flash {
+            from { background-color: rgba(103, 112, 254, 0.22); }
+            to { background-color: transparent; }
+        }
+
+        /* 原生消息导航在 768px 以下被前端设成 display:none，宽屏也要悬停才露出。
+           窄屏没有悬停，只能常显；同时给消息列表补右内边距，避免导航压住正文 */
+        @media (max-width: 767px) {
+            [style*="--scroll-nav-page-padding"] {
+                display: flex !important;
+            }
+
+            .ds-virtual-list-items {
+                padding-right: 48px !important;
+            }
+        }
     `;
     document.head.appendChild(style);
 }

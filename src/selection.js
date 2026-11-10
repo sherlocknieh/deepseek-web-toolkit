@@ -46,7 +46,10 @@ export function updateSelectedState() {
 // 监听 SPA 路由变化，切换会话、前进后退时让高亮跟随
 export function listenDomain() {
     // 路由事件用固定引用注册，热更新时由 runtime.dispose 移除
-    runtime.onRouteChange = () => updateSelectedState();
+    runtime.onRouteChange = () => {
+        updateSelectedState();
+        runtime.refreshMessageNav?.();
+    };
     window.addEventListener('popstate', runtime.onRouteChange);
     window.addEventListener('hashchange', runtime.onRouteChange);
 
@@ -59,6 +62,7 @@ export function listenDomain() {
             history[fn] = function(...args) {
                 const ret = orig.apply(this, args);
                 window[RUNTIME_KEY]?.refreshSelection?.();
+                window[RUNTIME_KEY]?.refreshMessageNav?.();
                 return ret;
             };
         });
