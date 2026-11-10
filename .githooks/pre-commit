@@ -1,0 +1,5 @@
+#!/bin/sh
+# 提交前自动把版本号改成当前日期时间并重新构建，产物随本次提交一起走
+# 跳过检查：git commit --no-verify（发布脚本走自己的流程，不会再触发本钩子）
+node scripts/bump-and-build.mjs || exit 1
+git add vite.config.js dist

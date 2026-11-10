@@ -2,6 +2,20 @@
 
 DeepSeek 油猴脚本，一个产物包含三块互不依赖的功能：会话目录（把置顶区里名称带 `/` 的会话原地折叠成目录）、KaTeX 复制修正（注入官方 copy-tex）和消息导航（会话内快速跳转到指定消息，**尚未实现**，`src/` 里没有对应模块）。Vite + vite-plugin-monkey，源码在 `src/`，构建产物在 `dist/deepseek-toolkit.user.js`。
 
+结构变化时同步更新本文件。
+
+## 快速命令
+
+```bash
+npm run dev                    # 开发调试（浏览器打开终端输出的 http://localhost:5173）
+npm run build                  # 只重新构建 dist，不动版本号
+npm run hooks                  # 让 git 指向 .githooks，启用提交前自动升版本+构建
+npm run release "feat: xxx"    # 升版本 → 构建 → commit → tag（--push 同时推送）
+npm run release --dry-run      # 只预览将要使用的版本号
+```
+
+版本号由 `scripts/bump-and-build.mjs` 按系统本地时间生成并写入 `vite.config.js`，格式 `YYYY.MM.DD.HHmm`，**不要手改，也不要手改 `dist` 产物**。
+
 ## 模块图
 
 依赖方向：`main → drag / observer / editor / selection / styles → render / titles / pin / api → dom / path / storage → runtime / constants`。
@@ -72,6 +86,7 @@ DeepSeek 油猴脚本，一个产物包含三块互不依赖的功能：会话�
 - 改展开持久化/存储 → `storage.js` + `constants.js`。
 - DeepSeek 前端更新 → `dom.js` 的选择器与 `checkFrontUpdating` 一起改。
 - 新增交互状态 → 加到 `runtime.js`，并把清理函数登记进 `runtime.disposers`。
+- 改发布流程/版本号规则 → `scripts/bump-and-build.mjs` + `.githooks/pre-commit` + `scripts/release.mjs`，同步 `README-dev.md` 的「版本号与发布」。
 - 消息导航（待实现）→ 新建独立模块并在 `main.js` 启动时调用，不要塞进目录渲染链路。
 
 ## 浏览器调试
@@ -104,7 +119,8 @@ cp -a "$SRC/Default/Local Storage" "$DST/Default/Local Storage"
 
 ## 验证
 
-- 构建：`npm run build`（见 `package.json`；产物写到 `dist/`）。
+- 构建：`npm run build`（见 `package.json`；产物写到 `dist/`，不改版本号）。
+- 发布：`npm run release "feat: …"` 升日期时间版本号 → 构建 → 核对产物 `@version` → commit → tag；提交前钩子 `.githooks/pre-commit` 走同一套升版本+构建逻辑，发布脚本因此用 `--no-verify` 跳过它。
 - 真机：打开 `chat.deepseek.com`，控制台应出现 `[DeepSeek 工具箱] 脚本已加载` 和 `已初始化，会话数 N`；确认只有置顶区成目录、叶子只显示末段、未置顶斜杠会话平铺、拖动/置顶/改名可用。新建入口在“置顶”标题右侧，点 `+` 后目录树末尾应出现带输入框的临时行；Enter/失焦提交、Esc 取消，提交后应变成空目录；拖会话进去应改名并让空目录占位消失；空目录悬停可删除。
 - 调试：`npm run dev` 的 `server:` 版本依赖 Vite 服务和 CSP 放行；日常与 Firefox 用构建版。
 - 消息导航：尚未实现，没有可验证的入口；实现后在此补充验证步骤。

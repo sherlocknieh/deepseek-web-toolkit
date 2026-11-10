@@ -58,7 +58,10 @@
 
 ```shell
 npm install
+npm run hooks
 ```
+
+`npm run hooks` 把 git 钩子目录指向 `.githooks`，让每次提交前自动升版本并构建；换机器或重新克隆后需要再执行一次。
 
 ## 调试
 
@@ -74,13 +77,29 @@ npm run dev
 - Chrome 142+ 会拦截本地网络访问，需在站点设置里把 "Local network access" 设为允许。
 - 热更新会先回收上一轮界面和观察器（`window.__deepseek_chat_folders_runtime__`），不会叠加多份文件夹。
 
+## 版本号与发布
+
+版本号写在 `vite.config.js` 的 `userscript.version`，按系统本地时间生成，格式 `YYYY.MM.DD.HHmm`（如 `2026.11.10.1635`）；同一分钟内重复执行或系统时间回拨时会顺延到更大的分钟，保证递增。**不要手工修改版本号，也不要手工编辑 `dist` 产物。**
+
+提交前钩子 `.githooks/pre-commit` 调用 `scripts/bump-and-build.mjs`：计算新版本号 → 写入 `vite.config.js` → `npm run build` → 核对产物头部 `@version`，失败时还原配置并中断提交；成功后把 `vite.config.js` 和 `dist` 一起加入本次提交。
+
+需要同时打标签时用发布脚本：
+
+```shell
+npm run release "feat: 本次改动说明"          # 升版本 -> 构建 -> commit -> tag
+npm run release "fix: 本次改动说明" --push    # 额外推送分支与标签到 origin
+npm run release --dry-run                    # 只打印将要使用的版本号
+```
+
+发布脚本自己完成升版本和构建，提交时跳过 pre-commit 钩子（`--no-verify`），避免钩子再升一次导致标签与产物不一致。`dist` 随源码提交，必须与源码在同一次提交里更新。
+
 ## 构建
 
 ```shell
 npm run build
 ```
 
-产物直接覆盖 `dist/deepseek-web-toolkit.user.js`，README 里的安装链接保持不变。
+只重新构建产物，不改版本号，供调试或本地验证使用。产物直接覆盖 `dist/deepseek-web-toolkit.user.js`，README 里的安装链接保持不变。
 
 ## Firefox
 
@@ -95,4 +114,7 @@ npm run build
 - `src/katex-copy.js`：KaTeX copy-tex 注入，与目录功能互不依赖
 - 消息导航：规划中，尚无源码模块
 - `src/*.js`：按职责拆分；模块图、数据模型和改动路径见 `AGENTS.md`
-- `vite.config.js`：userscript 元数据与构建输出位置
+- `vite.config.js`：userscript 元数据与构建输出位置；`version` 由脚本按日期时间写入，不要手改
+- `scripts/bump-and-build.mjs`：升版本号并构建，提交前钩子与发布脚本共用
+- `scripts/release.mjs`：发布（升版本 → 构建 → commit → tag → 可选 push）
+- `.githooks/pre-commit`：提交前自动升版本并构建
