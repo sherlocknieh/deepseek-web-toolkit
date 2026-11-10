@@ -11,6 +11,7 @@ import { cleanupInPlace, removeNewFolderButton, disposeNewFolderEditor, disposeF
 import { initKatexCopy } from './katex-copy.js';
 import { initMessageNav } from './message-nav.js';
 import { patchNativeNavBreakpoint } from './native-nav.js';
+import { initThinkCollapse, disposeThinkCollapse } from './think-collapse.js';
 
 // 开发热更新可能只重跑入口而不重跑 runtime.js；先回收当前实例再登记本轮清理
 if (runtime.initialized) {
@@ -21,7 +22,16 @@ runtime.initialized = true;
 // 必须在应用读取断点前改写，否则导航已被卸载
 patchNativeNavBreakpoint();
 
-runtime.disposers.push(clearDropHighlight, restoreDisplayTitles, disposeRenameEditor, cleanupInPlace, removeNewFolderButton, disposeNewFolderEditor, disposeFolderRename);
+runtime.disposers.push(
+    clearDropHighlight,
+    restoreDisplayTitles,
+    disposeRenameEditor,
+    cleanupInPlace,
+    removeNewFolderButton,
+    disposeNewFolderEditor,
+    disposeFolderRename,
+    disposeThinkCollapse
+);
 runtime.refreshSelection = updateSelectedState;
 runtime.rebuild = rebuild;
 
@@ -47,6 +57,9 @@ function main() {
     }
 
     console.log('[DeepSeek 工具箱] 脚本已加载，等待会话列表…');
+
+    // 思考折叠只依赖消息区结构，不等侧栏，开局就接管
+    initThinkCollapse();
 
     waitFor(() => getOriginalAnchors().length > 0, () => {
         if (checkFrontUpdating()) {

@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         DeepSeek 网页端工具箱 - LaTeX 公式复制 & 会话文件夹 & 消息导航
+// @name         DeepSeek 网页端工具箱 - LaTeX 公式复制 & 会话文件夹 & 消息导航 & 折叠思考
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.10.1743
+// @version      2026.11.10.1910
 // @author       sherlocknieh
-// @description  增强 DeepSeek 网页端使用体验: 会话文件夹 + 消息导航 + KaTeX 公式复制修正。
+// @description  增强 DeepSeek 网页端使用体验: 会话文件夹 + 消息导航 + KaTeX 公式复制修正 + 默认折叠思考。
 // @license      MIT
 // @icon         https://www.deepseek.com/favicon.ico
 // @downloadURL  https://github.com/sherlocknieh/deepseek-web-toolkit/raw/main/dist/deepseek-web-toolkit.user.js
@@ -2195,10 +2195,116 @@
 		};
 		pageWindow[PATCH_FLAG] = true;
 	}
+	var THINK_SELECTOR = ".ds-think-content";
+	var HEADER_ATTR = "data-dscf-think";
+	var ITEM_KEY_ATTR = "data-virtual-list-item-key";
+	var WIP_TITLE = /^(正在|思考中|Thinking)/i;
+	var SCAN_INTERVAL = 200;
+	var MAX_ATTEMPTS = 3;
+	var states = new Map();
+	var fallbackStates = new WeakMap();
+	var observer = null;
+	var timer = null;
+	var routeKey = "";
+	function currentRouteKey() {
+		const match = location.pathname.match(/\/a\/chat\/s\/([a-f0-9-]+)/i);
+		return match ? match[1] : "";
+	}
+	function stateOf(wrapper) {
+		const item = wrapper.closest(`[${ITEM_KEY_ATTR}]`);
+		const key = item && item.getAttribute(ITEM_KEY_ATTR);
+		if (!key) {
+			if (!fallbackStates.has(wrapper)) fallbackStates.set(wrapper, {
+				touched: false,
+				attempts: 0
+			});
+			return fallbackStates.get(wrapper);
+		}
+		const fullKey = (routeKey || currentRouteKey()) + "#" + key;
+		if (!states.has(fullKey)) states.set(fullKey, {
+			touched: false,
+			attempts: 0
+		});
+		return states.get(fullKey);
+	}
+	function getBlocks() {
+		return Array.from(document.querySelectorAll(THINK_SELECTOR)).map((content) => {
+			const wrapper = content.parentElement;
+			const header = wrapper && wrapper.firstElementChild;
+			if (!wrapper || !header || header.contains(content)) return null;
+			return {
+				wrapper,
+				header
+			};
+		}).filter(Boolean);
+	}
+	function clickHeader(header) {
+		const pageWindow = getPageWindow();
+		const MouseEventCtor = pageWindow.MouseEvent || MouseEvent;
+		header.dispatchEvent(new MouseEventCtor("click", {
+			bubbles: true,
+			cancelable: true,
+			view: pageWindow
+		}));
+	}
+	function collapseFinished() {
+		getBlocks().forEach(({ wrapper, header }) => {
+			header.setAttribute(HEADER_ATTR, "1");
+			const state = stateOf(wrapper);
+			if (state.touched || state.attempts >= MAX_ATTEMPTS) return;
+			const title = (header.textContent || "").trim();
+			if (!title || WIP_TITLE.test(title)) return;
+			state.attempts += 1;
+			clickHeader(header);
+		});
+	}
+	function schedule() {
+		if (timer) return;
+		timer = setTimeout(() => {
+			timer = null;
+			collapseFinished();
+		}, SCAN_INTERVAL);
+	}
+	function onDocumentClick(event) {
+		if (!event.isTrusted) return;
+		const target = event.target instanceof Element ? event.target : null;
+		const header = target && target.closest(`[${HEADER_ATTR}]`);
+		if (header && header.parentElement) stateOf(header.parentElement).touched = true;
+	}
+	function initThinkCollapse() {
+		routeKey = currentRouteKey();
+		collapseFinished();
+		document.addEventListener("click", onDocumentClick, true);
+		observer = new MutationObserver(() => {
+			const next = currentRouteKey();
+			if (next !== routeKey) {
+				routeKey = next;
+				states.clear();
+			}
+			schedule();
+		});
+		observer.observe(document.body, {
+			childList: true,
+			subtree: true
+		});
+	}
+	function disposeThinkCollapse() {
+		clearTimeout(timer);
+		timer = null;
+		document.removeEventListener("click", onDocumentClick, true);
+		if (observer) {
+			observer.disconnect();
+			observer = null;
+		}
+		states.clear();
+		document.querySelectorAll(`[${HEADER_ATTR}]`).forEach((header) => {
+			header.removeAttribute(HEADER_ATTR);
+		});
+	}
 	if (runtime.initialized) runtime.dispose();
 	runtime.initialized = true;
 	patchNativeNavBreakpoint();
-	runtime.disposers.push(clearDropHighlight, restoreDisplayTitles, disposeRenameEditor, cleanupInPlace, removeNewFolderButton, disposeNewFolderEditor, disposeFolderRename);
+	runtime.disposers.push(clearDropHighlight, restoreDisplayTitles, disposeRenameEditor, cleanupInPlace, removeNewFolderButton, disposeNewFolderEditor, disposeFolderRename, disposeThinkCollapse);
 	runtime.refreshSelection = updateSelectedState;
 	runtime.rebuild = rebuild;
 	function checkFrontUpdating() {
@@ -2219,6 +2325,7 @@
 			return;
 		}
 		console.log("[DeepSeek 工具箱] 脚本已加载，等待会话列表…");
+		initThinkCollapse();
 		waitFor(() => getOriginalAnchors().length > 0, () => {
 			if (checkFrontUpdating()) {
 				console.warn("Deepseek 前端已更新，会话目录暂不生效（公式复制不受影响）。");

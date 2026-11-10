@@ -1,10 +1,11 @@
 # DeepSeek 工具箱（开发目录）
 
-源码在 `src/main.js`，用 [vite-plugin-monkey](https://vite-plugin-monkey.pages.dev/) 调试和构建。一个脚本包含三块互不依赖的功能：
+源码在 `src/main.js`，用 [vite-plugin-monkey](https://vite-plugin-monkey.pages.dev/) 调试和构建。一个脚本包含四块功能：
 
 - **会话目录**：把置顶区里名称带 `/` 的会话原地折叠成目录
 - **KaTeX 复制修正**：注入官方 copy-tex，复制公式得到 LaTeX 源码（`src/katex-copy.js`）
 - **消息导航**：DeepSeek 用原生导航（仅补窄屏显示），其他站点用 `src/message-nav.js` 的通用实现
+- **折叠思考**：`src/think-collapse.js` 默认收起已完成的思考块
 
 ## 会话目录要点
 

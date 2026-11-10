@@ -1,6 +1,6 @@
 # DeepSeek 工具箱 — Agent Index
 
-DeepSeek 油猴脚本，一个产物包含三块互不依赖的功能：会话目录（置顶区里名称带 `/` 的会话原地折叠成目录）、KaTeX 复制修正（注入官方 copy-tex）、消息导航（DeepSeek 用原生导航，其他站点用通用实现）。Vite + vite-plugin-monkey，源码在 `src/`，产物在 `dist/deepseek-web-toolkit.user.js`。
+DeepSeek 油猴脚本，一个产物包含四块互不依赖的功能：会话目录（置顶区里名称带 `/` 的会话原地折叠成目录）、KaTeX 复制修正（注入官方 copy-tex）、消息导航（DeepSeek 用原生导航，其他站点用通用实现）、默认折叠思考。Vite + vite-plugin-monkey，源码在 `src/`，产物在 `dist/deepseek-web-toolkit.user.js`。
 
 ## 快速命令
 
@@ -24,6 +24,7 @@ npm run release --dry-run      # 只预览版本号
 | `katex-copy.js` | 注入 KaTeX copy-tex，与目录功能无依赖 |
 | `native-nav.js` | 改写原生导航的 `(max-width: 1200px)` 断点，避免侧栏展开时导航被卸载 |
 | `message-nav.js` | 通用消息导航：右侧圆点 + 完整列表；DeepSeek 不启用 |
+| `think-collapse.js` | 默认折叠已完成的思考块，只点应用自己的标题栏 |
 | `runtime.js` | 运行时状态、上一实例回收、页面 window |
 | `constants.js` | 键名、缩进、布局 data 属性名 |
 | `storage.js` | GM/localStorage 回退、展开状态、空目录占位（仅内存） |
@@ -58,7 +59,7 @@ npm run release --dry-run      # 只预览版本号
 
 ## 启动与热更新
 
-`main.js` → `addCSSClass` / `initKatexCopy` → `waitFor` 侧栏会话 → `checkFrontUpdating` → `rebuild(true)` → `observeChatList` / `initDragAndDrop` / `listenDomain`。
+`main.js` → `addCSSClass` / `initKatexCopy` / `initThinkCollapse` → `waitFor` 侧栏会话 → `checkFrontUpdating` → `rebuild(true)` → `observeChatList` / `initDragAndDrop` / `listenDomain`。
 
 `runtime.js` 在模块加载时回收上一轮实例；HMR 可能只重跑 `main.js`，入口再用 `runtime.initialized` 判断并 `runtime.dispose()`，清理函数登记在 `runtime.disposers`。
 
@@ -67,6 +68,7 @@ npm run release --dry-run      # 只预览版本号
 - 滚动区 `.ds-scroll-area`；内容 `._77cdc67`；分组 `._3098d02`；置顶分组额外 `_63701b7`，标题“置顶”/“Pinned”。
 - 会话项 `<a class="_546d736" href="/a/chat/s/<id>">`，子元素 `[0]` 焦点环、`[1]` 标题、`[2]` “更多”。
 - 选中 class `b64fb9ae`；菜单项文字在 `.ds-dropdown-menu-option__label`。
+- 消息项带 `data-virtual-list-item-key`（会话内从 0 递增，切会话会复用）；思考块是 `.ds-message > ._74c0879`，第一个子元素是标题栏、含 `.ds-think-content` 时表示展开。
 - 混淆 class 是脆弱契约，改选择器时同步 `dom.js` 与 `main.js` 的 `checkFrontUpdating`。
 
 ## 改动路径
@@ -78,6 +80,7 @@ npm run release --dry-run      # 只预览版本号
 - 拖动/放置 → `drag.js`；置顶 `pin.js`；改名 `api.js`
 - 展开持久化 → `storage.js` + `constants.js`
 - 通用消息导航 → `message-nav.js`；原生导航显隐 → `native-nav.js` + `styles.js`
+- 思考折叠 → `think-collapse.js`
 - DeepSeek 前端更新 → `dom.js` + `checkFrontUpdating`
 - 新增交互状态 → `runtime.js` + `runtime.disposers`
 - 发布流程 → `scripts/*` + `.githooks/pre-commit`
@@ -108,4 +111,5 @@ cp -a "$SRC/Default/Local Storage" "$DST/Default/Local Storage"
 
 - 构建：`npm run build`；发布：`npm run release "feat: …"`（钩子走同一套升版本+构建，发布脚本用 `--no-verify` 跳过）。
 - 真机：控制台出现 `[DeepSeek 工具箱] 脚本已加载` 和 `已初始化，会话数 N`；确认只有置顶区成目录、叶子只显示末段、未置顶斜杠会话平铺、拖动/置顶/改名可用、新建与删除空目录正常。
+- 确认打开会话时已完成的思考块默认收起、思考输出中保持展开、手动展开后不再被收起。
 - 确认右侧原生消息导航全程常显且不压正文，缩放跨过 768px 时导航不闪、右边距不跳变；其他站点出现圆点列，点击可跳转，按钮可展开列表。

@@ -1,5 +1,5 @@
 
-## DeepSeek 网页端工具箱 - LaTeX 公式复制 & 会话文件夹 & 消息导航
+## DeepSeek 网页端工具箱 - LaTeX 公式复制 & 会话文件夹 & 消息导航 & 折叠思考
 
 安装地址: https://github.com/sherlocknieh/deepseek-web-toolkit/raw/main/dist/deepseek-web-toolkit.user.js
 
@@ -26,3 +26,7 @@ DeepSeek 使用它自带的右侧消息导航; 脚本只做两件事: 全程常�
 ChatGPT / Grok / Gemini 等站点使用脚本的通用导航: 消息区右侧一列圆点, 点击跳到对应消息, 顶部按钮展开完整消息列表。
 
 同时支持 deepseek, chatgpt, grok, gemini 网页端;
+
+- 默认折叠思考
+
+每次打开对话, DeepSeek 会默认展开思考, 占用较多屏幕空间, 现在可以默认折叠思考: 已完成的思考块自动收起, 正在输出的思考保持展开, 手动点开过的块不再被收起。
