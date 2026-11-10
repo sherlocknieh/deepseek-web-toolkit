@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import monkey from 'vite-plugin-monkey';
 
 // 开发：npm run dev 后把终端里的 dev 版 userscript 装进油猴，改代码自动热更新
-// 构建：npm run build 直接覆盖 simple-scripts 下的发布文件，保持 README 安装链接不变
+// 构建：npm run build 直接覆盖 dist 下的发布文件，保持 README 安装链接不变
 export default defineConfig({
   plugins: [
     monkey({
@@ -16,8 +16,8 @@ export default defineConfig({
         match: ['https://chat.deepseek.com/*'],
         icon: 'https://www.deepseek.com/favicon.ico',
         license: 'MIT',
-        downloadURL: 'https://github.com/sherlocknieh/Monkey-Scripts/raw/main/simple-scripts/deepseek-toolkit.user.js',
-        updateURL: 'https://github.com/sherlocknieh/Monkey-Scripts/raw/main/simple-scripts/deepseek-toolkit.user.js',
+        downloadURL: 'https://github.com/sherlocknieh/deepseek-web-toolkit/raw/main/dist/deepseek-web-toolkit.user.js',
+        updateURL: 'https://github.com/sherlocknieh/deepseek-web-toolkit/raw/main/dist/deepseek-web-toolkit.user.js',
         grant: ['GM_setValue', 'GM_getValue'],
       },
       build: {

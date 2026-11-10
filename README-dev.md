@@ -1,9 +1,10 @@
 # DeepSeek 工具箱（开发目录）
 
-源码在 `src/main.js`，使用 [vite-plugin-monkey](https://vite-plugin-monkey.pages.dev/) 调试和构建。一个脚本包含两块互不依赖的功能：
+源码在 `src/main.js`，使用 [vite-plugin-monkey](https://vite-plugin-monkey.pages.dev/) 调试和构建。一个脚本包含三块互不依赖的功能：
 
 - **会话目录**：把置顶区里名称带 `/` 的会话原地折叠成目录，见下文
 - **KaTeX 复制修正**：注入 KaTeX 官方的 copy-tex，复制公式时得到 LaTeX 源码；实现在 `src/katex-copy.js`，入口启动时调用一次，不参与目录逻辑
+- **消息导航**：会话内消息过多时跳转到指定消息；**尚未实现**，`src/` 里还没有对应模块
 
 ## 实现方式
 
@@ -79,11 +80,11 @@ npm run dev
 npm run build
 ```
 
-产物直接覆盖 `../simple-scripts/deepseek-toolkit.user.js`，README 里的安装链接保持不变。
+产物直接覆盖 `dist/deepseek-web-toolkit.user.js`，README 里的安装链接保持不变。
 
 ## Firefox
 
-- 推荐安装构建版（`../simple-scripts/deepseek-toolkit.user.js`），不要使用带 `server:` 前缀的调试版
+- 推荐安装构建版（`dist/deepseek-web-toolkit.user.js`），不要使用带 `server:` 前缀的调试版
 - 调试版依赖 Vite 服务从 `127.0.0.1:5173` 加载模块，Firefox 上还受页面 CSP / 混合内容限制，服务停止或未放行 CSP 时完全不会生效
 - 控制台出现 `[DeepSeek 工具箱] 脚本已加载` 说明脚本已注入；随后出现 `已初始化，会话数 N` 说明目录已生效
 - 如果必须用调试版，需要保持 `npm run dev` 运行，并给 chat.deepseek.com 关闭 CSP（Disable-CSP 类扩展）
@@ -92,5 +93,6 @@ npm run build
 
 - `src/main.js`：入口、启动顺序和热更新清理
 - `src/katex-copy.js`：KaTeX copy-tex 注入，与目录功能互不依赖
+- 消息导航：规划中，尚无源码模块
 - `src/*.js`：按职责拆分；模块图、数据模型和改动路径见 `AGENTS.md`
 - `vite.config.js`：userscript 元数据与构建输出位置

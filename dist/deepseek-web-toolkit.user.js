@@ -6,8 +6,8 @@
 // @description  增强 DeepSeek 网页端使用体验: 会话文件夹 + 消息导航 + KaTeX 公式复制修正。
 // @license      MIT
 // @icon         https://www.deepseek.com/favicon.ico
-// @downloadURL  https://github.com/sherlocknieh/Monkey-Scripts/raw/main/simple-scripts/deepseek-toolkit.user.js
-// @updateURL    https://github.com/sherlocknieh/Monkey-Scripts/raw/main/simple-scripts/deepseek-toolkit.user.js
+// @downloadURL  https://github.com/sherlocknieh/deepseek-web-toolkit/raw/main/dist/deepseek-web-toolkit.user.js
+// @updateURL    https://github.com/sherlocknieh/deepseek-web-toolkit/raw/main/dist/deepseek-web-toolkit.user.js
 // @match        https://chat.deepseek.com/*
 // @grant        GM_getValue
 // @grant        GM_setValue

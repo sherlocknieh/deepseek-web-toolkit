@@ -1,6 +1,6 @@
 # DeepSeek 工具箱 — Agent Index
 
-DeepSeek 油猴脚本，一个产物包含两块互不依赖的功能：会话目录（把置顶区里名称带 `/` 的会话原地折叠成目录）和 KaTeX 复制修正（注入官方 copy-tex）。Vite + vite-plugin-monkey，源码在 `src/`，构建产物在 `../simple-scripts/deepseek-toolkit.user.js`。
+DeepSeek 油猴脚本，一个产物包含三块互不依赖的功能：会话目录（把置顶区里名称带 `/` 的会话原地折叠成目录）、KaTeX 复制修正（注入官方 copy-tex）和消息导航（会话内快速跳转到指定消息，**尚未实现**，`src/` 里没有对应模块）。Vite + vite-plugin-monkey，源码在 `src/`，构建产物在 `dist/deepseek-toolkit.user.js`。
 
 ## 模块图
 
@@ -10,6 +10,7 @@ DeepSeek 油猴脚本，一个产物包含两块互不依赖的功能：会话�
 | --- | --- | --- |
 | `src/main.js` | 入口、启动顺序、热更新清理登记 | — |
 | `src/katex-copy.js` | 注入 KaTeX copy-tex 的样式和脚本，与目录功能无依赖 | `initKatexCopy` |
+| （消息导航） | 规划中：会话内消息过多时跳转到指定消息；目前没有实现，不要按已有模块引用 | — |
 | `src/runtime.js` | 跨模块运行时状态、上一实例回收、页面 window | `runtime`, `getPageWindow` |
 | `src/constants.js` | 键名、目录缩进、布局 data 属性名 | `RUNTIME_KEY`, `EXPANDED_KEY`, `BASE_PADDING`, `INDENT`, `HIDDEN_ATTR`, `CHAT_ATTR` |
 | `src/storage.js` | GM/localStorage 回退、展开状态、手动新建的空文件夹占位（仅内存） | `isExpanded`, `setExpanded`, `toggleExpanded`, `getExtraFolders`, `hasExtraFolder`, `addExtraFolder`, `removeExtraFolder`, `dropExtraFolderChain`, `renameExtraFolders` |
@@ -71,6 +72,7 @@ DeepSeek 油猴脚本，一个产物包含两块互不依赖的功能：会话�
 - 改展开持久化/存储 → `storage.js` + `constants.js`。
 - DeepSeek 前端更新 → `dom.js` 的选择器与 `checkFrontUpdating` 一起改。
 - 新增交互状态 → 加到 `runtime.js`，并把清理函数登记进 `runtime.disposers`。
+- 消息导航（待实现）→ 新建独立模块并在 `main.js` 启动时调用，不要塞进目录渲染链路。
 
 ## 浏览器调试
 
@@ -92,7 +94,7 @@ cp -a "$SRC/Default/Local Storage" "$DST/Default/Local Storage"
 
 2. **启动带 CDP 的 Chrome**：`--user-data-dir=$DST --profile-directory=Default --remote-debugging-port=9337 --remote-allow-origins='*'`，打开 `https://chat.deepseek.com/`。
 
-3. **注入构建版脚本并验证**：用 `tools/browser-debug.mjs` 在页面里 eval `../simple-scripts/deepseek-toolkit.user.js` 的内容，然后 `eval` 小段 DOM 检查脚本、`shot` 截图、`key`/`type` 模拟交互、`net` 抓接口。
+3. **注入构建版脚本并验证**：用 `tools/browser-debug.mjs` 在页面里 eval `dist/deepseek-web-toolkit.user.js` 的内容，然后 `eval` 小段 DOM 检查脚本、`shot` 截图、`key`/`type` 模拟交互、`net` 抓接口。
 
 4. **核对服务端数据**：页面里用 `localStorage.userToken` 的 token 调 `GET /api/v0/chat_session/fetch_page?count=50`，确认改名后的标题真的落库；不要只看本地缓存。
 
@@ -102,6 +104,7 @@ cp -a "$SRC/Default/Local Storage" "$DST/Default/Local Storage"
 
 ## 验证
 
-- 构建：`npm run build`（见 `package.json`；产物写到 `../simple-scripts/`）。
+- 构建：`npm run build`（见 `package.json`；产物写到 `dist/`）。
 - 真机：打开 `chat.deepseek.com`，控制台应出现 `[DeepSeek 工具箱] 脚本已加载` 和 `已初始化，会话数 N`；确认只有置顶区成目录、叶子只显示末段、未置顶斜杠会话平铺、拖动/置顶/改名可用。新建入口在“置顶”标题右侧，点 `+` 后目录树末尾应出现带输入框的临时行；Enter/失焦提交、Esc 取消，提交后应变成空目录；拖会话进去应改名并让空目录占位消失；空目录悬停可删除。
 - 调试：`npm run dev` 的 `server:` 版本依赖 Vite 服务和 CSP 放行；日常与 Firefox 用构建版。
+- 消息导航：尚未实现，没有可验证的入口；实现后在此补充验证步骤。
