@@ -1,120 +1,46 @@
 # DeepSeek 工具箱（开发目录）
 
-源码在 `src/main.js`，使用 [vite-plugin-monkey](https://vite-plugin-monkey.pages.dev/) 调试和构建。一个脚本包含三块互不依赖的功能：
+源码在 `src/main.js`，用 [vite-plugin-monkey](https://vite-plugin-monkey.pages.dev/) 调试和构建。一个脚本包含三块互不依赖的功能：
 
-- **会话目录**：把置顶区里名称带 `/` 的会话原地折叠成目录，见下文
-- **KaTeX 复制修正**：注入 KaTeX 官方的 copy-tex，复制公式时得到 LaTeX 源码；实现在 `src/katex-copy.js`，入口启动时调用一次，不参与目录逻辑
-- **消息导航**：会话内消息过多时跳转到指定消息；**尚未实现**，`src/` 里还没有对应模块
+- **会话目录**：把置顶区里名称带 `/` 的会话原地折叠成目录
+- **KaTeX 复制修正**：注入官方 copy-tex，复制公式得到 LaTeX 源码（`src/katex-copy.js`）
+- **消息导航**：会话内跳转到指定消息，**尚未实现**
 
-## 实现方式
+## 会话目录要点
 
-不创建独立文件夹栏，也不复制会话节点：
+- 只作用于置顶区；按标题里的 `/` 建树，如「工作/项目A/讨论」→ 工作 → 项目A
+- 不复制会话节点，只给列表容器加 `display:flex`，用 `order` 原地重排并插入目录行，保留选中态和“更多”菜单
+- 叶子只显示末段，完整路径存在 `data-dscf-full-title`；解析、置顶、拖动都用完整路径
+- 目录优先排序：先子目录后叶子，按名称（中文拼音、数字大小）
+- 支持新建空目录（内存占位，刷新消失）、行内重命名、拖动整理；未置顶会话改名成路径或拖入目录时自动置顶
+- 应用改名输入框打开时暂停重排，保存后自动补回目录前缀
 
-- 目录只应用于**置顶区**；未置顶会话保持平铺
-- 按会话名里的 `/` 建树，如「工作/项目A/讨论」归入 工作 → 项目A
-- 排序时文件夹整体优先：同一容器里目录行和叶子先按树排列，根级会话排在所有目录之后
-- 目录内先子目录后叶子，子目录和叶子都按名称排序（中文按拼音、数字按大小），叶子不沿用应用给的最近更新顺序
-- 给置顶区的会话列表容器加 `display: flex`，用 `order` 原地重排，并插入目录行
-- 可以手动新建空文件夹（支持“父/子”多层），新目录先作为内存占位显示，拖入会话后由会话标题接管；悬停空目录右侧的 × 可删除
-- 目录行悬停出现铅笔按钮，可就地重命名；整棵子树里会话的标题前缀、空目录占位和展开状态一起迁移
-- 目录里的叶子行只显示会话名最后一段，完整路径保存在元素数据里，悬停可见；解析、置顶和拖动仍用完整路径
-- 原始会话节点保持不动，因此选中态、点击导航和“更多”菜单（重命名/删除/置顶）都保留
-- 应用自带的重命名输入框打开时暂停重排，输入框停在被改名会话原来的行位置，编辑结束后自动恢复
-- 重命名只改末段名称：输入框预填末段并全选，保存后自动补回目录前缀；输入带 `/` 则按新的完整路径处理
-- 名称没改就确认（回车或失焦）不会发起重命名请求：预填是静默的，确认前还会把值还原成完整路径让应用认为没变化
-- 补前缀后会读一次服务端标题核对，防止应用自己的改名请求晚到、把前缀覆盖掉
-- 当前会话被折叠时，高亮最深的可见祖先目录
-- 未置顶会话被改名成带 `/` 的路径，或拖进目录时，会自动置顶（走应用自己的“置顶”菜单）
-- 已经在未置顶区、名字里带 `/` 的历史会话不会自动置顶，等改名或拖动时才触发
-- 监听会话增删和标题变化，自动重排
-
-## 拖动整理
-
-- 拖动会话到目录行或其他置顶会话：移入对应目录，会话名会改成目标目录路径
-- 拖动会话到新建的空目录：先自动置顶（未置顶时），再改名放入；空目录占位自动转为普通目录
-- 拖到列表空白或分组标题：移出目录，回到根级
-- 拖动目录行到其他目录：整个目录子树一起移动；拖到空白处移回根级
-- 拖到自身、后代或当前所在目录会被忽略
-- 改名通过 DeepSeek 的 `update_title` 接口完成；置顶通过应用自己的“置顶”菜单完成
-- 改名成功后当前页面用本地标题覆盖立即刷新，刷新后以服务端标题为准
-
-## 新建文件夹
-
-- 点“置顶”标题右侧的 `+`，目录列表末尾会直接出现一个带输入框的临时目录行，默认名称为“新文件夹”且已全选
-- 输入名称后按 Enter 或点到别处即创建；Esc 取消，名称清空时不会留下目录
-- 输入 `父/子` 会一次建出多层目录
-- 空目录只存在内存里（不写 `GM_*`/localStorage），只显示在置顶区，刷新页面后消失；拖入第一条会话后改为由会话标题支撑
-- 空目录行右侧悬停出现 `×`，只删除内存里的空目录记录，不影响任何会话
-- 没有置顶区时不显示新建入口
-
-## 重命名文件夹
-
-- 悬停目录行右侧出现铅笔按钮，点击后就在该行内编辑名称
-- Enter 或点到别处保存，Esc 取消；名称清空或没改动则保持原样
-- 改名会改掉整棵子树里所有置顶会话的标题前缀，空目录占位和展开状态一起迁移
-- 新名称与已有目录相同时自动合并；不能把目录改到自己下面
-
-## 安装依赖
+## 安装与调试
 
 ```shell
 npm install
-npm run hooks
-```
-
-`npm run hooks` 把 git 钩子目录指向 `.githooks`，让每次提交前自动升版本并构建；换机器或重新克隆后需要再执行一次。
-
-## 调试
-
-```shell
+npm run hooks   # 指向 .githooks，启用提交前自动升版本+构建
 npm run dev
 ```
 
-终端会输出 Vite 的本地地址。把 `http://localhost:5173/__vite-plugin-monkey.install.user.js` 装进油猴（端口被占用时以输出里的 Local 地址为准），打开 https://chat.deepseek.com ，修改 `src/main.js` 保存即可热更新。
+把终端输出的 `http://localhost:5173/__vite-plugin-monkey.install.user.js` 装进油猴，打开 https://chat.deepseek.com ，改 `src/main.js` 保存即热更新。
 
-注意：
-
-- DeepSeek 页面存在 CSP 时，从 localhost 加载的开发脚本会被拦截，需要 Disable-CSP 类扩展。
-- Chrome 142+ 会拦截本地网络访问，需在站点设置里把 "Local network access" 设为允许。
-- 热更新会先回收上一轮界面和观察器（`window.__deepseek_chat_folders_runtime__`），不会叠加多份文件夹。
+注意：页面 CSP 会拦截 localhost 脚本（需 Disable-CSP 类扩展）；Chrome 142+ 需允许 Local network access。
 
 ## 版本号与发布
 
-版本号写在 `vite.config.js` 的 `userscript.version`，按系统本地时间生成，格式 `YYYY.MM.DD.HHmm`（如 `2026.11.10.1635`）；同一分钟内重复执行或系统时间回拨时会顺延到更大的分钟，保证递增。**不要手工修改版本号，也不要手工编辑 `dist` 产物。**
+版本号在 `vite.config.js` 的 `userscript.version`，由脚本按本地时间生成 `YYYY.MM.DD.HHmm`，**不要手改，也不要手改 `dist`**。
 
-提交前钩子 `.githooks/pre-commit` 调用 `scripts/bump-and-build.mjs`：计算新版本号 → 写入 `vite.config.js` → `npm run build` → 核对产物头部 `@version`，失败时还原配置并中断提交；成功后把 `vite.config.js` 和 `dist` 一起加入本次提交。
-
-需要同时打标签时用发布脚本：
-
-```shell
-npm run release "feat: 本次改动说明"          # 升版本 -> 构建 -> commit -> tag
-npm run release "fix: 本次改动说明" --push    # 额外推送分支与标签到 origin
-npm run release --dry-run                    # 只打印将要使用的版本号
-```
-
-发布脚本自己完成升版本和构建，提交时跳过 pre-commit 钩子（`--no-verify`），避免钩子再升一次导致标签与产物不一致。`dist` 随源码提交，必须与源码在同一次提交里更新。
-
-## 构建
-
-```shell
-npm run build
-```
-
-只重新构建产物，不改版本号，供调试或本地验证使用。产物直接覆盖 `dist/deepseek-web-toolkit.user.js`，README 里的安装链接保持不变。
+- 提交前钩子 `.githooks/pre-commit` → `scripts/bump-and-build.mjs`：升版本 → 构建 → 核对产物 `@version`，失败还原配置并中断提交
+- `npm run release "feat: …"`：升版本 → 构建 → commit → tag；`--push` 推送，`--dry-run` 只预览版本号
+- `npm run build`：只构建，不改版本号
 
 ## Firefox
 
-- 推荐安装构建版（`dist/deepseek-web-toolkit.user.js`），不要使用带 `server:` 前缀的调试版
-- 调试版依赖 Vite 服务从 `127.0.0.1:5173` 加载模块，Firefox 上还受页面 CSP / 混合内容限制，服务停止或未放行 CSP 时完全不会生效
-- 控制台出现 `[DeepSeek 工具箱] 脚本已加载` 说明脚本已注入；随后出现 `已初始化，会话数 N` 说明目录已生效
-- 如果必须用调试版，需要保持 `npm run dev` 运行，并给 chat.deepseek.com 关闭 CSP（Disable-CSP 类扩展）
+装构建版 `dist/deepseek-web-toolkit.user.js`；带 `server:` 前缀的调试版依赖 Vite 服务和 CSP 放行。控制台出现 `[DeepSeek 工具箱] 脚本已加载` 和 `已初始化，会话数 N` 即生效。
 
 ## 结构
 
-- `src/main.js`：入口、启动顺序和热更新清理
-- `src/katex-copy.js`：KaTeX copy-tex 注入，与目录功能互不依赖
-- 消息导航：规划中，尚无源码模块
-- `src/*.js`：按职责拆分；模块图、数据模型和改动路径见 `AGENTS.md`
-- `vite.config.js`：userscript 元数据与构建输出位置；`version` 由脚本按日期时间写入，不要手改
-- `scripts/bump-and-build.mjs`：升版本号并构建，提交前钩子与发布脚本共用
-- `scripts/release.mjs`：发布（升版本 → 构建 → commit → tag → 可选 push）
-- `.githooks/pre-commit`：提交前自动升版本并构建
+- `src/*.js`：按职责拆分，模块图与改动路径见 [AGENTS.md](./AGENTS.md)
+- `vite.config.js`：userscript 元数据与构建输出
+- `scripts/bump-and-build.mjs` / `scripts/release.mjs` / `.githooks/pre-commit`：版本号与发布
