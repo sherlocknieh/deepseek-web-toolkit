@@ -22,8 +22,9 @@
 - 前端在「宽度 ≤1200px 且侧栏展开」时直接不渲染导航（源码条件 `r.length<2 || (u && h)`），CSS 救不回来；`src/native-nav.js` 在 document-start 改写 `matchMedia('(max-width: 1200px)')` 让它恒为 false，该断点只服务导航
 - 覆盖规则不设断点：断点两侧的媒体查询区间不重合，缩放跨过 768px 时导航会先消失再出现
 - 右内边距用 `max(应用居中留白, 下限)`，下限在 768px 处随列表外边距从 44px 收到 20px 同步从 14px 提到 38px，右侧总留白全程 58px，不会突然变宽
-- 其他站点由 `src/message-nav.js` 启动：只依赖 DOM，用 `[data-message-author-role]`、`user-query`、`model-response`、`message-content`、`article` 识别消息块，向上找装有多条消息的最高可滚动区块作为容器
-- 角色优先读标记，读不到时按提问/回答交替推断；圆点高亮跟随滚动，跳转后短暂高亮目标消息
+- 其他站点由 `src/message-nav.js` 启动：只依赖 DOM，按 `SITE_ADAPTERS` 里各自的适配项识别消息块、角色、正文范围和滚动容器；未适配站点才退回 `[data-message-author-role]`、`user-query`、`model-response`、`message-content`、`article` 这组通用标记
+- 各站点选择器：ChatGPT `[data-message-author-role]` + `main`；Gemini `user-query, model-response`（正文取 `div.query-content` / `message-content`）+ `infinite-scroller`；Grok `div[id^='response-']`（用户消息带 `items-end`，正文取 `.response-content-markdown`）+ `main`
+- 命中元素若被其他命中元素包含会被丢掉，避免容器和子元素重复计数；角色优先读标记，读不到时按提问/回答交替推断；圆点高亮跟随滚动，跳转后短暂高亮目标消息
 - 消息少于 3 条时整体隐藏；SPA 切会话靠 700ms 地址栏轮询重新识别
 
 ## 安装与调试

@@ -4,21 +4,59 @@ import { runtime } from './runtime.js';
 // DeepSeek 自带原生导航，这里只在其他站点启用；实现只依赖 DOM，不碰站点内部实例。
 //
 // 识别规则：
-//   消息块 —— 各站点常见的语义标记（data-message-author-role、user-query 等）
+//   消息块 —— 按站点各自的结构取；没有适配的站点才退回通用语义标记
 //   滚动容器 —— 同时包含多条消息、内容最高的可滚动区块
-//   角色 —— 优先读标记，读不到时按提问/回答交替推断
+//   角色 —— 优先读站点标记，读不到时按提问/回答交替推断
 
 const NAV_ATTR = 'data-dscf-msgnav';
 const FLASH_MS = 1600;
 const MIN_ENTRIES = 3;
 
-const MESSAGE_SELECTOR = [
+// 站点适配：每种站点只声明自己的消息块选择器、角色判定、正文范围和滚动容器。
+// 不共用一个“全能选择器”，否则外层容器和它的子元素会同时命中，同一条消息被数两次
+const SITE_ADAPTERS = [
+    {
+        hosts: ['chatgpt.com', 'chat.openai.com'],
+        selector: '[data-message-author-role]',
+        role: el => (el.getAttribute('data-message-author-role') === 'user' ? 'USER' : 'ASSISTANT'),
+        scroller: 'main'
+    },
+    {
+        hosts: ['gemini.google.com'],
+        selector: 'user-query, model-response',
+        role: el => (el.tagName.toLowerCase() === 'user-query' ? 'USER' : 'ASSISTANT'),
+        // 正文只在气泡内，避免把「你说 / Gemini 说」这类标签和工具栏带进列表
+        content: el => el.querySelector('div.query-content') || el.querySelector('message-content') || el,
+        scroller: 'infinite-scroller, #chat-history'
+    },
+    {
+        hosts: ['grok.com'],
+        // 用户消息和回答都在 response- 前缀的块里，用户那条额外带 items-end
+        selector: "div[id^='response-']",
+        role: el => (el.matches('.items-end') ? 'USER' : 'ASSISTANT'),
+        content: el => el.querySelector('.response-content-markdown') || el,
+        scroller: 'main'
+    }
+];
+
+// 未适配站点按常见语义标记兜底；去掉嵌套命中由 dropNested 负责
+const FALLBACK_SELECTOR = [
     '[data-message-author-role]',
     'user-query',
     'model-response',
     'message-content',
     'article'
 ].join(',');
+
+// 同一页面内站点不会变化，适配器在加载时定下来
+const ADAPTER = resolveAdapter();
+
+function resolveAdapter() {
+    const host = location.hostname;
+    return SITE_ADAPTERS.find(adapter =>
+        adapter.hosts.some(h => host === h || host.endsWith('.' + h))
+    ) || null;
+}
 
 const state = {
     scroller: null,
@@ -43,14 +81,18 @@ const state = {
     flashing: new Map()
 };
 
-// 取消息正文：去掉按钮和工具栏文案后压成单行，供列表和悬停提示使用
+// 取消息正文：先按站点收敛到气泡元素，再去掉按钮和工具栏文案后压成单行
 function readText(el) {
-    const clone = el.cloneNode(true);
+    const source = ADAPTER && ADAPTER.content ? ADAPTER.content(el) : el;
+    const clone = source.cloneNode(true);
     clone.querySelectorAll('button, svg, [aria-hidden="true"], nav, form').forEach(node => node.remove());
     return (clone.textContent || '').replace(/\s+/g, ' ').trim();
 }
 
 function detectRole(el, index) {
+    const role = ADAPTER && ADAPTER.role ? ADAPTER.role(el) : null;
+    if (role) return role;
+
     const author = el.getAttribute('data-message-author-role');
     if (author === 'user') return 'USER';
     if (author === 'assistant') return 'ASSISTANT';
@@ -62,13 +104,31 @@ function detectRole(el, index) {
     return index % 2 === 0 ? 'USER' : 'ASSISTANT';
 }
 
-function getMessageBlocks() {
-    return Array.from(document.querySelectorAll(MESSAGE_SELECTOR))
-        .filter(el => el.getClientRects().length > 0);
+// 去掉被其他命中元素包含的节点：容器和子元素同时命中会让同一条消息出现两次
+function dropNested(nodes) {
+    const matched = new Set(nodes);
+    return nodes.filter(el => {
+        for (let parent = el.parentElement; parent; parent = parent.parentElement) {
+            if (matched.has(parent)) return false;
+        }
+        return true;
+    });
 }
 
-// 滚动容器：从消息块往上找同时装有多条消息、内容最高的可滚动区块
+function getMessageBlocks() {
+    const selector = (ADAPTER && ADAPTER.selector) || FALLBACK_SELECTOR;
+    const blocks = Array.from(document.querySelectorAll(selector))
+        .filter(el => el.getClientRects().length > 0);
+    return dropNested(blocks);
+}
+
+// 滚动容器：优先用站点给定的容器，找不到再从消息块往上找同时装有多条消息、内容最高的可滚动区块
 function resolveScroller(blocks) {
+    if (ADAPTER && ADAPTER.scroller) {
+        const hinted = blocks[0].closest(ADAPTER.scroller);
+        if (hinted && hinted.scrollHeight > hinted.clientHeight + 40) return hinted;
+    }
+
     let best = null;
     let bestHeight = 0;
 

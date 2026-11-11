@@ -23,7 +23,7 @@ npm run release --dry-run      # 只预览版本号
 | `main.js` | 入口、启动顺序、热更新清理登记 |
 | `katex-copy.js` | 注入 KaTeX copy-tex，与目录功能无依赖 |
 | `native-nav.js` | 改写原生导航的 `(max-width: 1200px)` 断点，避免侧栏展开时导航被卸载 |
-| `message-nav.js` | 通用消息导航：右侧圆点 + 完整列表；DeepSeek 不启用 |
+| `message-nav.js` | 通用消息导航：右侧圆点 + 完整列表，按站点适配选择器；DeepSeek 不启用 |
 | `think-collapse.js` | 默认折叠已完成的思考块，只点应用自己的标题栏 |
 | `runtime.js` | 运行时状态、上一实例回收、页面 window |
 | `constants.js` | 键名、缩进、布局 data 属性名 |
@@ -84,7 +84,7 @@ npm run release --dry-run      # 只预览版本号
 - DeepSeek 前端更新 → `dom.js` + `checkFrontUpdating`
 - 新增交互状态 → `runtime.js` + `runtime.disposers`
 - 发布流程 → `scripts/*` + `.githooks/pre-commit`
-- 消息导航 → `message-nav.js`：非 DeepSeek 站点在 `main.js` 启动；DeepSeek 用原生导航，`native-nav.js` 改写 `(max-width: 1200px)` 断点避免侧栏展开时被卸载，`styles.js` 负责常显与留白
+- 消息导航 → `message-nav.js`：非 DeepSeek 站点在 `main.js` 启动；站点差异只写在 `SITE_ADAPTERS`（消息块选择器、角色判定、正文范围、滚动容器），未适配站点走通用标记兜底；DeepSeek 用原生导航，`native-nav.js` 改写 `(max-width: 1200px)` 断点避免侧栏展开时被卸载，`styles.js` 负责常显与留白
 
 ## 浏览器调试
 

@@ -333,8 +333,12 @@ export function addCSSClass() {
             margin-top: 2px;
         }
 
-        /* 深色主题跟随应用 body 上的 dark 标记 */
-        body.dark .dscf-msgnav {
+        /* 深色主题：各站点标记不同（ChatGPT/Grok 用 html.dark，DeepSeek 用 body.dark，
+           Gemini 用 dark-theme / data-theme），全部跟随，避免深色底上画出深色圆点 */
+        html.dark .dscf-msgnav,
+        body.dark .dscf-msgnav,
+        .dark-theme .dscf-msgnav,
+        [data-theme="dark"] .dscf-msgnav {
             --dscf-fg: #e6e8eb;
             --dscf-panel-bg: rgba(38, 40, 44, 0.98);
         }

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 网页端工具箱 - LaTeX 公式复制 & 会话文件夹 & 消息导航 & 折叠思考
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.10.1910
+// @version      2026.11.12.0245
 // @author       sherlocknieh
 // @description  增强 DeepSeek 网页端使用体验: 会话文件夹 + 消息导航 + KaTeX 公式复制修正 + 默认折叠思考。
 // @license      MIT
@@ -413,8 +413,12 @@
             margin-top: 2px;
         }
 
-        /* 深色主题跟随应用 body 上的 dark 标记 */
-        body.dark .dscf-msgnav {
+        /* 深色主题：各站点标记不同（ChatGPT/Grok 用 html.dark，DeepSeek 用 body.dark，
+           Gemini 用 dark-theme / data-theme），全部跟随，避免深色底上画出深色圆点 */
+        html.dark .dscf-msgnav,
+        body.dark .dscf-msgnav,
+        .dark-theme .dscf-msgnav,
+        [data-theme="dark"] .dscf-msgnav {
             --dscf-fg: #e6e8eb;
             --dscf-panel-bg: rgba(38, 40, 44, 0.98);
         }
@@ -1806,13 +1810,40 @@
 	var NAV_ATTR = "data-dscf-msgnav";
 	var FLASH_MS = 1600;
 	var MIN_ENTRIES = 3;
-	var MESSAGE_SELECTOR = [
+	var SITE_ADAPTERS = [
+		{
+			hosts: ["chatgpt.com", "chat.openai.com"],
+			selector: "[data-message-author-role]",
+			role: (el) => el.getAttribute("data-message-author-role") === "user" ? "USER" : "ASSISTANT",
+			scroller: "main"
+		},
+		{
+			hosts: ["gemini.google.com"],
+			selector: "user-query, model-response",
+			role: (el) => el.tagName.toLowerCase() === "user-query" ? "USER" : "ASSISTANT",
+			content: (el) => el.querySelector("div.query-content") || el.querySelector("message-content") || el,
+			scroller: "infinite-scroller, #chat-history"
+		},
+		{
+			hosts: ["grok.com"],
+			selector: "div[id^='response-']",
+			role: (el) => el.matches(".items-end") ? "USER" : "ASSISTANT",
+			content: (el) => el.querySelector(".response-content-markdown") || el,
+			scroller: "main"
+		}
+	];
+	var FALLBACK_SELECTOR = [
 		"[data-message-author-role]",
 		"user-query",
 		"model-response",
 		"message-content",
 		"article"
 	].join(",");
+	var ADAPTER = resolveAdapter();
+	function resolveAdapter() {
+		const host = location.hostname;
+		return SITE_ADAPTERS.find((adapter) => adapter.hosts.some((h) => host === h || host.endsWith("." + h))) || null;
+	}
 	var state = {
 		scroller: null,
 		entries: [],
@@ -1836,11 +1867,13 @@
 		flashing: new Map()
 	};
 	function readText(el) {
-		const clone = el.cloneNode(true);
+		const clone = (ADAPTER && ADAPTER.content ? ADAPTER.content(el) : el).cloneNode(true);
 		clone.querySelectorAll("button, svg, [aria-hidden=\"true\"], nav, form").forEach((node) => node.remove());
 		return (clone.textContent || "").replace(/\s+/g, " ").trim();
 	}
 	function detectRole(el, index) {
+		const role = ADAPTER && ADAPTER.role ? ADAPTER.role(el) : null;
+		if (role) return role;
 		const author = el.getAttribute("data-message-author-role");
 		if (author === "user") return "USER";
 		if (author === "assistant") return "ASSISTANT";
@@ -1849,10 +1882,22 @@
 		if (tag === "model-response") return "ASSISTANT";
 		return index % 2 === 0 ? "USER" : "ASSISTANT";
 	}
+	function dropNested(nodes) {
+		const matched = new Set(nodes);
+		return nodes.filter((el) => {
+			for (let parent = el.parentElement; parent; parent = parent.parentElement) if (matched.has(parent)) return false;
+			return true;
+		});
+	}
 	function getMessageBlocks() {
-		return Array.from(document.querySelectorAll(MESSAGE_SELECTOR)).filter((el) => el.getClientRects().length > 0);
+		const selector = ADAPTER && ADAPTER.selector || FALLBACK_SELECTOR;
+		return dropNested(Array.from(document.querySelectorAll(selector)).filter((el) => el.getClientRects().length > 0));
 	}
 	function resolveScroller(blocks) {
+		if (ADAPTER && ADAPTER.scroller) {
+			const hinted = blocks[0].closest(ADAPTER.scroller);
+			if (hinted && hinted.scrollHeight > hinted.clientHeight + 40) return hinted;
+		}
 		let best = null;
 		let bestHeight = 0;
 		let node = blocks[0]?.parentElement;
