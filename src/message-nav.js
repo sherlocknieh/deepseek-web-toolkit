@@ -17,8 +17,13 @@ const MIN_ENTRIES = 3;
 const SITE_ADAPTERS = [
     {
         hosts: ['chatgpt.com', 'chat.openai.com'],
-        selector: '[data-message-author-role]',
-        role: el => (el.getAttribute('data-message-author-role') === 'user' ? 'USER' : 'ASSISTANT'),
+        // 旧版每段消息带 author-role；新版整轮拆成 unit，角色写在 data-chatgpt-search-unit-key 后缀
+        selector: '[data-message-author-role], [data-chatgpt-search-unit-key]',
+        role: el => {
+            const author = el.getAttribute('data-message-author-role');
+            if (author) return author === 'user' ? 'USER' : 'ASSISTANT';
+            return /:user$/.test(el.getAttribute('data-chatgpt-search-unit-key') || '') ? 'USER' : 'ASSISTANT';
+        },
         scroller: 'main'
     },
     {
@@ -31,10 +36,10 @@ const SITE_ADAPTERS = [
     },
     {
         hosts: ['grok.com'],
-        // 用户消息和回答都在 response- 前缀的块里，用户那条额外带 items-end
+        // 用户消息和回答都在 response- 前缀的块里，靠 testid 区分角色
         selector: "div[id^='response-']",
-        role: el => (el.matches('.items-end') ? 'USER' : 'ASSISTANT'),
-        content: el => el.querySelector('.response-content-markdown') || el,
+        role: el => (el.querySelector('[data-testid="user-message"]') ? 'USER' : 'ASSISTANT'),
+        content: el => el.querySelector('.response-content-markdown') || el.querySelector('[data-bubble-text]') || el,
         scroller: 'main'
     }
 ];
@@ -79,8 +84,8 @@ const state = {
 function readText(el) {
     const source = ADAPTER && ADAPTER.content ? ADAPTER.content(el) : el;
     const clone = source.cloneNode(true);
-    // .cdk-visually-hidden 是 Gemini 给读屏软件复述的提问文本，和正文重复
-    clone.querySelectorAll('button, svg, [aria-hidden="true"], nav, form, .cdk-visually-hidden').forEach(node => node.remove());
+    // 读屏专用文案（Gemini 复述的提问、ChatGPT/Grok 的「你说」）会和正文重复，一并剔除
+    clone.querySelectorAll('button, svg, [aria-hidden="true"], nav, form, .sr-only, .cdk-visually-hidden').forEach(node => node.remove());
     return (clone.textContent || '').replace(/\s+/g, ' ').trim();
 }
 
@@ -223,20 +228,22 @@ function setActive(key) {
 function ensureDom() {
     if (state.root) return;
 
-    // 结构对齐 DeepSeek 原生导航：一颗毛玻璃胶囊里放一列条目，收起时只露横线
+    // 结构对齐 DeepSeek 原生导航：底部一层毛玻璃胶囊，上面一层列表；收起时列表透明
     const root = document.createElement('div');
     root.className = 'dscf-msgnav';
     root.setAttribute(NAV_ATTR, '1');
 
+    const pill = document.createElement('div');
+    pill.className = 'dscf-msgnav-pill';
+
     const list = document.createElement('div');
     list.className = 'dscf-msgnav-list';
 
-    // 滚动层单独一层，胶囊底色留在外层，上下渐隐才不会把圆角一起吃掉
     const items = document.createElement('div');
     items.className = 'dscf-msgnav-items';
     list.append(items);
 
-    root.append(list);
+    root.append(pill, list);
     document.body.appendChild(root);
 
     state.root = root;

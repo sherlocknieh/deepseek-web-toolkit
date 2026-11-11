@@ -161,18 +161,27 @@ export function addCSSClass() {
             box-shadow: inset 0 0 0 1.5px rgba(103, 112, 254, 0.55);
         }
 
-        /* 通用消息导航（其他站点用；DeepSeek 走原生导航）：照搬 DeepSeek 原生导航的
-           尺寸与交互——右侧居中的毛玻璃胶囊收成一列横线，悬停展开成消息列表 */
+        /* 通用消息导航（其他站点用；DeepSeek 走原生导航）：几何照搬原生导航——
+           右侧固定 34×300，收起时只露一颗 34×292 的毛玻璃胶囊和一列横线；
+           悬停后换成 240 宽、按内容高度垂直居中的实色消息列表 */
         .dscf-msgnav {
+            --dscf-nav-bg: rgba(255, 255, 255, 0.8);
+            --dscf-nav-solid: #ffffff;
+            --dscf-nav-border: transparent;
+            --dscf-nav-shadow: 0 0 1px 0 rgba(0, 0, 0, 0.2), 0 0 4px 0 rgba(0, 0, 0, 0.02), 0 12px 32px 0 rgba(0, 0, 0, 0.08);
+            --dscf-nav-title: #81858c;
+            --dscf-nav-hover: #0f1115;
+            --dscf-nav-line: rgba(0, 0, 0, 0.16);
+            --dscf-nav-active: #3964fe;
             position: fixed;
             top: 50%;
             right: 16px;
             transform: translateY(-50%);
+            width: 34px;
             height: 300px;
             z-index: 40;
             display: none;
             user-select: none;
-            color: var(--dscf-fg, #262626);
         }
 
         .dscf-msgnav.is-visible {
@@ -186,83 +195,75 @@ export function addCSSClass() {
             }
         }
 
-        /* 胶囊本体：34px 收起、240px 展开，尺寸变化由 width 过渡承载 */
-        .dscf-msgnav-list {
-            position: relative;
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-            width: 34px;
-            padding: 4px 0;
-            box-sizing: border-box;
-            border-radius: 16px;
-            overflow: hidden;
-            background-color: var(--dscf-nav-bg, rgba(255, 255, 255, 0.8));
-            backdrop-filter: blur(5px);
-            transition: width 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
-        }
-
-        /* 展开后列表可滚动，上下各盖一层同色渐变，和原生导航的滚动边缘一致 */
-        .dscf-msgnav-list::before,
-        .dscf-msgnav-list::after {
-            content: "";
+        /* 胶囊底色单独一层：收起时只有它可见，展开后被列表的实色背景盖住 */
+        .dscf-msgnav-pill {
             position: absolute;
-            left: 0;
+            top: 50%;
             right: 0;
-            height: 24px;
-            z-index: 2;
-            pointer-events: none;
-            opacity: 0;
+            transform: translateY(-50%);
+            width: 34px;
+            height: calc(100% - 8px);
+            border-radius: 16px;
+            background-color: var(--dscf-nav-bg);
+            backdrop-filter: blur(5px);
             transition: opacity 0.2s ease;
         }
 
-        .dscf-msgnav-list::before {
-            top: 0;
-            background: linear-gradient(var(--dscf-nav-bg-solid, #ffffff), transparent);
+        /* 展开后由列表的实色背景接管，避免胶囊在列表上下露出半截 */
+        .dscf-msgnav:hover .dscf-msgnav-pill,
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-pill {
+            opacity: 0;
         }
 
-        .dscf-msgnav-list::after {
-            bottom: 0;
-            background: linear-gradient(transparent, var(--dscf-nav-bg-solid, #ffffff));
-        }
-
-        .dscf-msgnav:hover .dscf-msgnav-list::before,
-        .dscf-msgnav:hover .dscf-msgnav-list::after,
-        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-list::before,
-        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-list::after {
-            opacity: 1;
-        }
-
-        .dscf-msgnav-items {
-            flex: 1 1 auto;
+        /* 列表宽度固定 240：收起时透明、只漏出右侧横线，展开时条目不再横向跳动 */
+        .dscf-msgnav-list {
+            position: absolute;
+            top: 50%;
+            right: 0;
+            transform: translateY(-50%);
             display: flex;
             flex-direction: column;
+            width: 240px;
+            max-height: 100%;
+            box-sizing: border-box;
+            border: 1px solid transparent;
+            border-radius: 16px;
+            overflow: hidden;
+            pointer-events: none;
+            transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .dscf-msgnav:hover .dscf-msgnav-list,
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-list {
+            background-color: var(--dscf-nav-solid);
+            border-color: var(--dscf-nav-border);
+            box-shadow: var(--dscf-nav-shadow);
+            pointer-events: auto;
+        }
+
+        /* 列表高度随条目走，最多撑满胶囊；条目整体在胶囊里垂直居中 */
+        .dscf-msgnav-items {
+            flex: 0 1 auto;
+            max-height: 290px;
+            padding: 15px 6px 15px 24px;
+            box-sizing: border-box;
             overflow-y: auto;
+            scrollbar-width: none;
         }
 
         .dscf-msgnav-items::-webkit-scrollbar {
             width: 0;
         }
 
-        .dscf-msgnav:hover .dscf-msgnav-list,
-        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-list {
-            width: 240px;
-            background-color: var(--dscf-nav-bg-solid, #ffffff);
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-        }
-
         /* 一项一条消息：标题靠左、横线贴右；收起时标题透明，只留横线 */
         .dscf-msgnav-item {
-            flex: 0 0 auto;
             display: flex;
             align-items: center;
             justify-content: flex-end;
-            width: calc(100% - 6px);
+            width: 100%;
             height: 30px;
-            margin-right: 8px;
             padding: 0;
             border: 0;
-            border-radius: 8px;
             background: transparent;
             color: inherit;
             font: inherit;
@@ -279,7 +280,7 @@ export function addCSSClass() {
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            color: var(--dscf-fg, #262626);
+            color: var(--dscf-nav-title);
             opacity: 0;
             transition: opacity 0.1s ease, color 0.2s ease;
         }
@@ -303,25 +304,26 @@ export function addCSSClass() {
             width: 8px;
             height: 2px;
             border-radius: 4px;
-            background-color: var(--dscf-line, #c9c9c9);
+            background-color: var(--dscf-nav-line);
             transition: background-color 0.2s ease, transform 0.2s ease;
         }
 
+        /* 悬停条目：标题和横线一起提到正文色 */
         .dscf-msgnav-item:hover .dscf-msgnav-line {
-            background-color: var(--dscf-fg, #262626);
+            background-color: var(--dscf-nav-hover);
         }
 
         .dscf-msgnav-item:hover .dscf-msgnav-title {
-            color: var(--dscf-fg, #262626);
+            color: var(--dscf-nav-hover);
         }
 
         .dscf-msgnav-item.is-active .dscf-msgnav-line {
-            background-color: var(--dscf-brand, #4d6bfe);
+            background-color: var(--dscf-nav-active);
             transform: scale(1.5);
         }
 
         .dscf-msgnav-item.is-active .dscf-msgnav-title {
-            color: var(--dscf-brand, #4d6bfe);
+            color: var(--dscf-nav-active);
             font-weight: 500;
         }
 
@@ -331,11 +333,13 @@ export function addCSSClass() {
         body.dark .dscf-msgnav,
         .dark-theme .dscf-msgnav,
         [data-theme="dark"] .dscf-msgnav {
-            --dscf-fg: #e6e8eb;
-            --dscf-line: rgba(255, 255, 255, 0.28);
-            --dscf-brand: #7a92ff;
             --dscf-nav-bg: rgba(21, 21, 23, 0.6);
-            --dscf-nav-bg-solid: #1b1b1d;
+            --dscf-nav-solid: #232324;
+            --dscf-nav-border: rgba(255, 255, 255, 0.06);
+            --dscf-nav-title: #adb2b8;
+            --dscf-nav-hover: #f9fafb;
+            --dscf-nav-line: rgba(255, 255, 255, 0.2);
+            --dscf-nav-active: #679efe;
         }
 
         /* 跳转目标短暂高亮 */
