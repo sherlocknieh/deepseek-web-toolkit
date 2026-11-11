@@ -1,7 +1,7 @@
 import { runtime } from './runtime.js';
 
-// 通用消息导航：在消息区右侧画一列圆点，点击跳到对应消息。
-// DeepSeek 自带原生导航，这里只在其他站点启用；实现只依赖 DOM，不碰站点内部实例。
+// 通用消息导航：复刻 DeepSeek 原生导航——右侧一颗胶囊收成一列横线，悬停展开消息列表，
+// 点击跳到对应消息。DeepSeek 自带原生导航，这里只在其他站点启用；实现只依赖 DOM，不碰站点内部实例。
 //
 // 识别规则：
 //   消息块 —— 按站点各自的结构取；没有适配的站点才退回通用语义标记
@@ -63,13 +63,8 @@ const state = {
     entries: [],
     signature: '',
     root: null,
-    rail: null,
-    dots: [],
-    toggle: null,
-    panel: null,
     list: null,
     rows: [],
-    open: false,
     activeKey: null,
     observer: null,
     onScroll: null,
@@ -77,7 +72,6 @@ const state = {
     href: location.href,
     refreshTimer: null,
     watchTimer: null,
-    layoutFrame: 0,
     flashing: new Map()
 };
 
@@ -184,7 +178,6 @@ function jumpTo(entry) {
     block.scrollIntoView({ behavior: 'smooth', block: 'start' });
     flashEntry(block);
     setActive(entry.key);
-    closePanel();
 }
 
 // 跳转后短暂高亮，提示定位到了哪条消息
@@ -195,7 +188,7 @@ function flashEntry(block) {
     state.flashing.set(block, timer);
 }
 
-// 圆点高亮跟随滚动：最后一条越过视口上沿的消息就是当前读到的位置
+// 横线高亮跟随滚动：最后一条越过视口上沿的消息就是当前读到的位置
 function updateActive() {
     if (!state.entries.length || !state.scroller) return;
 
@@ -215,197 +208,83 @@ function updateActive() {
 function setActive(key) {
     if (state.activeKey === key) return;
     state.activeKey = key;
-    state.dots.forEach(dot => dot.classList.toggle('is-active', dot.dataset.key === key));
-    state.rows.forEach(row => row.classList.toggle('is-active', row.dataset.key === key));
-}
 
-function scheduleLayout() {
-    cancelAnimationFrame(state.layoutFrame);
-    state.layoutFrame = requestAnimationFrame(() => {
-        updateLayout();
-        updateRailSpacing();
-    });
-}
-
-// 导航吸附在消息区右缘，留出滚动条位置；窗口变窄时整体收进视口
-function updateLayout() {
-    const scroller = state.scroller;
-    const root = state.root;
-    if (!scroller || !root) return;
-
-    const rect = scroller.getBoundingClientRect();
-    const left = Math.min(rect.right, window.innerWidth) - 36;
-    const top = Math.max(rect.top + 48, 0);
-    const height = Math.max(160, rect.height - 120);
-
-    root.style.left = `${Math.round(left)}px`;
-    root.style.top = `${Math.round(top)}px`;
-    root.style.height = `${Math.round(height)}px`;
-    root.style.setProperty('--dscf-msgnav-height', `${Math.round(height)}px`);
-}
-
-// 圆点按可用高度均分间距，消息多时压缩成细线
-function updateRailSpacing() {
-    if (!state.rail) return;
-
-    const count = state.entries.length;
-    const height = parseFloat(getComputedStyle(state.root).getPropertyValue('--dscf-msgnav-height')) || 0;
-    const slot = count ? height / count : 0;
-    const size = Math.max(2, Math.min(6, slot * 0.6));
-    const gap = Math.max(0, Math.min(8, slot - size));
-
-    state.rail.style.gap = `${Math.round(gap * 10) / 10}px`;
-    state.dots.forEach(dot => {
-        dot.style.height = `${Math.round(size * 10) / 10}px`;
-        dot.style.width = `${Math.round(Math.max(2, size) * 10) / 10}px`;
+    state.rows.forEach(row => {
+        const active = row.dataset.key === key;
+        row.classList.toggle('is-active', active);
+        // 悬停展开时把当前项滚进可见范围，列表比胶囊高也不用自己找
+        if (active && state.root && state.root.matches(':hover')) {
+            row.scrollIntoView({ block: 'nearest' });
+        }
     });
 }
 
 function ensureDom() {
     if (state.root) return;
 
+    // 结构对齐 DeepSeek 原生导航：一颗毛玻璃胶囊里放一列条目，收起时只露横线
     const root = document.createElement('div');
     root.className = 'dscf-msgnav';
     root.setAttribute(NAV_ATTR, '1');
 
-    const side = document.createElement('div');
-    side.className = 'dscf-msgnav-side';
-
-    const toggle = document.createElement('button');
-    toggle.type = 'button';
-    toggle.className = 'dscf-msgnav-toggle';
-    toggle.title = '消息导航';
-    toggle.innerHTML = '<i class="fa-solid fa-list-ul"></i>';
-    toggle.addEventListener('click', togglePanel);
-
-    const rail = document.createElement('div');
-    rail.className = 'dscf-msgnav-rail';
-
-    const panel = document.createElement('div');
-    panel.className = 'dscf-msgnav-panel';
-    panel.hidden = true;
-
-    const head = document.createElement('div');
-    head.className = 'dscf-msgnav-head';
-
     const list = document.createElement('div');
     list.className = 'dscf-msgnav-list';
 
-    panel.append(head, list);
-    side.append(toggle, rail);
-    root.append(side, panel);
+    // 滚动层单独一层，胶囊底色留在外层，上下渐隐才不会把圆角一起吃掉
+    const items = document.createElement('div');
+    items.className = 'dscf-msgnav-items';
+    list.append(items);
+
+    root.append(list);
     document.body.appendChild(root);
 
     state.root = root;
-    state.rail = rail;
-    state.toggle = toggle;
-    state.panel = panel;
-    state.list = list;
-
-    document.addEventListener('mousedown', onDocumentMouseDown, true);
-    document.addEventListener('keydown', onDocumentKeyDown, true);
-    window.addEventListener('resize', scheduleLayout);
+    state.list = items;
 }
 
-function onDocumentMouseDown(event) {
-    if (!state.open) return;
-    if (state.root && state.root.contains(event.target)) return;
-    closePanel();
-}
-
-function onDocumentKeyDown(event) {
-    if (event.key === 'Escape' && state.open) closePanel();
-}
-
-function renderRail() {
-    ensureDom();
-
-    state.dots.forEach(dot => dot.remove());
-    state.dots = state.entries.map(entry => {
-        const dot = document.createElement('button');
-        dot.type = 'button';
-        dot.className = 'dscf-msgnav-dot';
-        dot.classList.toggle('is-active', entry.key === state.activeKey);
-        dot.dataset.key = entry.key;
-        dot.title = `${isUserEntry(entry) ? '我' : '回答'}：${entry.text || '（无正文）'}`.slice(0, 120);
-        dot.addEventListener('click', () => jumpTo(entry));
-        state.rail.appendChild(dot);
-        return dot;
-    });
-
-    state.toggle.classList.toggle('is-active', state.open);
-}
-
-function renderList() {
+function renderItems() {
     ensureDom();
 
     state.rows.forEach(row => row.remove());
-    state.rows = state.entries.map((entry, index) => {
+    state.rows = state.entries.map(entry => {
         const row = document.createElement('button');
         row.type = 'button';
         row.className = 'dscf-msgnav-item';
         row.classList.toggle('is-active', entry.key === state.activeKey);
         row.dataset.key = entry.key;
 
-        const icon = document.createElement('i');
-        icon.className = isUserEntry(entry) ? 'fa-solid fa-user' : 'fa-solid fa-robot';
+        const title = document.createElement('span');
+        title.className = 'dscf-msgnav-title';
+        title.textContent = entry.text || '（无正文）';
+        title.title = entry.text || '';
 
-        const text = document.createElement('span');
-        text.className = 'dscf-msgnav-text';
-        text.textContent = entry.text || '（无正文）';
-        text.title = entry.text || '';
+        const indicator = document.createElement('span');
+        indicator.className = 'dscf-msgnav-indicator';
+        const line = document.createElement('span');
+        line.className = 'dscf-msgnav-line';
+        indicator.append(line);
 
-        const badge = document.createElement('span');
-        badge.className = 'dscf-msgnav-index';
-        badge.textContent = String(index + 1);
-
-        row.append(icon, text, badge);
+        row.append(title, indicator);
         row.addEventListener('click', () => jumpTo(entry));
         state.list.appendChild(row);
         return row;
     });
-
-    state.panel.querySelector('.dscf-msgnav-head').textContent = `消息导航 · ${state.entries.length}`;
 }
 
 function syncVisibility() {
     if (!state.root) return;
-    const visible = state.entries.length >= MIN_ENTRIES;
-    state.root.classList.toggle('is-visible', visible);
-    if (!visible && state.open) closePanel();
-}
-
-function togglePanel() {
-    if (state.open) {
-        closePanel();
-        return;
-    }
-    state.open = true;
-    state.panel.hidden = false;
-    state.toggle.classList.add('is-active');
-    state.rows.find(row => row.dataset.key === state.activeKey)?.scrollIntoView({ block: 'nearest' });
-}
-
-function closePanel() {
-    state.open = false;
-    state.toggle?.classList.remove('is-active');
-    if (state.panel) state.panel.hidden = true;
+    state.root.classList.toggle('is-visible', state.entries.length >= MIN_ENTRIES);
 }
 
 function attachScroller(scroller) {
     detachScroller();
     state.scroller = scroller;
 
-    state.onScroll = () => {
-        updateActive();
-        scheduleLayout();
-    };
+    state.onScroll = () => updateActive();
     scroller.addEventListener('scroll', state.onScroll, { passive: true });
 
     state.observer = new MutationObserver(scheduleRefresh);
     state.observer.observe(scroller, { childList: true, subtree: true });
-
-    scheduleLayout();
 }
 
 function detachScroller() {
@@ -423,7 +302,7 @@ function scheduleRefresh() {
     state.refreshTimer = setTimeout(() => refreshMessageNav(), 300);
 }
 
-// 重建导航：条目清单变化才重画圆点和列表，单纯滚动不触发
+// 重建导航：条目清单变化才重画，单纯滚动只更新高亮
 export function refreshMessageNav() {
     const entries = readEntries();
 
@@ -445,7 +324,6 @@ export function refreshMessageNav() {
     const signature = makeSignature(entries);
     if (signature === state.signature) {
         syncVisibility();
-        scheduleLayout();
         updateActive();
         return;
     }
@@ -453,11 +331,8 @@ export function refreshMessageNav() {
     state.signature = signature;
     state.entries = entries;
 
-    renderRail();
-    renderList();
+    renderItems();
     syncVisibility();
-    updateLayout();
-    updateRailSpacing();
     updateActive();
 }
 
@@ -498,23 +373,13 @@ export function teardownMessageNav() {
     state.watchTimer = null;
     clearInterval(state.historyTimer);
     state.historyTimer = null;
-    cancelAnimationFrame(state.layoutFrame);
     state.flashing.forEach(timer => clearTimeout(timer));
     state.flashing.clear();
 
-    document.removeEventListener('mousedown', onDocumentMouseDown, true);
-    document.removeEventListener('keydown', onDocumentKeyDown, true);
-    window.removeEventListener('resize', scheduleLayout);
-
     state.root?.remove();
     state.root = null;
-    state.rail = null;
-    state.toggle = null;
-    state.panel = null;
     state.list = null;
-    state.dots = [];
     state.rows = [];
-    state.open = false;
     state.entries = [];
     state.activeKey = null;
     state.signature = '';

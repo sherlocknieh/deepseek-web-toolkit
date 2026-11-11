@@ -23,7 +23,7 @@ npm run release --dry-run      # 只预览版本号
 | `main.js` | 入口、启动顺序、热更新清理登记 |
 | `katex-copy.js` | 注入 KaTeX copy-tex，与目录功能无依赖 |
 | `native-nav.js` | 改写原生导航的 `(max-width: 1200px)` 断点，避免侧栏展开时导航被卸载 |
-| `message-nav.js` | 通用消息导航：右侧圆点 + 完整列表，按站点适配选择器；DeepSeek 不启用 |
+| `message-nav.js` | 通用消息导航：复刻 DeepSeek 胶囊（横线 + 悬停展开列表），按站点适配选择器；DeepSeek 不启用 |
 | `think-collapse.js` | 默认折叠已完成的思考块，只点应用自己的标题栏 |
 | `runtime.js` | 运行时状态、上一实例回收、页面 window |
 | `constants.js` | 键名、缩进、布局 data 属性名 |
@@ -84,7 +84,7 @@ npm run release --dry-run      # 只预览版本号
 - DeepSeek 前端更新 → `dom.js` + `checkFrontUpdating`
 - 新增交互状态 → `runtime.js` + `runtime.disposers`
 - 发布流程 → `scripts/*` + `.githooks/pre-commit`
-- 消息导航 → `message-nav.js`：非 DeepSeek 站点在 `main.js` 启动；站点差异只写在 `SITE_ADAPTERS`（消息块选择器、角色判定、正文范围、滚动容器），未适配站点走通用标记兜底；DeepSeek 用原生导航，`native-nav.js` 改写 `(max-width: 1200px)` 断点避免侧栏展开时被卸载，`styles.js` 负责常显与留白
+- 消息导航 → `message-nav.js`：非 DeepSeek 站点在 `main.js` 启动；站点差异只写在 `SITE_ADAPTERS`（消息块选择器、角色判定、正文范围、滚动容器），未适配站点走通用标记兜底；胶囊尺寸照抄 DeepSeek 原生导航（34px→240px、条目 30px、横线 8×2），改样式时以真机为准；DeepSeek 用原生导航，`native-nav.js` 改写 `(max-width: 1200px)` 断点避免侧栏展开时被卸载，`styles.js` 负责常显与留白
 
 ## 浏览器调试
 
@@ -112,4 +112,4 @@ cp -a "$SRC/Default/Local Storage" "$DST/Default/Local Storage"
 - 构建：`npm run build`；发布：`npm run release "feat: …"`（钩子走同一套升版本+构建，发布脚本用 `--no-verify` 跳过）。
 - 真机：控制台出现 `[DeepSeek 工具箱] 脚本已加载` 和 `已初始化，会话数 N`；确认只有置顶区成目录、叶子只显示末段、未置顶斜杠会话平铺、拖动/置顶/改名可用、新建与删除空目录正常。
 - 确认打开会话时已完成的思考块默认收起、思考输出中保持展开、手动展开后不再被收起。
-- 确认右侧原生消息导航全程常显且不压正文，缩放跨过 768px 时导航不闪、右边距不跳变；其他站点出现圆点列，点击可跳转，按钮可展开列表。
+- 确认右侧原生消息导航全程常显且不压正文，缩放跨过 768px 时导航不闪、右边距不跳变；其他站点出现右侧胶囊，收起是一列横线，悬停展开消息列表，点击可跳转，当前项横线加粗变蓝。

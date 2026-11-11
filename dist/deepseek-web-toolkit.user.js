@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 网页端工具箱 - LaTeX 公式复制 & 会话文件夹 & 消息导航 & 折叠思考
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.12.0245
+// @version      2026.11.12.0257
 // @author       sherlocknieh
 // @description  增强 DeepSeek 网页端使用体验: 会话文件夹 + 消息导航 + KaTeX 公式复制修正 + 默认折叠思考。
 // @license      MIT
@@ -248,128 +248,106 @@
             box-shadow: inset 0 0 0 1.5px rgba(103, 112, 254, 0.55);
         }
 
-        /* 通用消息导航（其他站点用；DeepSeek 走原生导航）：右侧圆点常驻，按钮展开完整列表 */
+        /* 通用消息导航（其他站点用；DeepSeek 走原生导航）：照搬 DeepSeek 原生导航的
+           尺寸与交互——右侧居中的毛玻璃胶囊收成一列横线，悬停展开成消息列表 */
         .dscf-msgnav {
             position: fixed;
-            top: 0;
-            left: 0;
-            height: 400px;
-            display: none;
-            align-items: flex-start;
+            top: 50%;
+            right: 16px;
+            transform: translateY(-50%);
+            height: 300px;
             z-index: 40;
-            pointer-events: none;
-            color: var(--dscf-fg, #1f2329);
+            display: none;
+            user-select: none;
+            color: var(--dscf-fg, #262626);
         }
 
         .dscf-msgnav.is-visible {
-            display: flex;
+            display: block;
         }
 
-        .dscf-msgnav-side {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 6px;
-            pointer-events: auto;
+        /* 和原生导航一致：窄屏不显示，避免胶囊压住正文 */
+        @media not all and (min-width: 768px) {
+            .dscf-msgnav {
+                display: none !important;
+            }
         }
 
-        .dscf-msgnav-toggle {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            flex: 0 0 20px;
-            width: 20px;
-            height: 20px;
-            padding: 0;
-            border: 0;
-            border-radius: 50%;
-            background: transparent;
-            color: inherit;
-            font-size: 11px;
-            cursor: pointer;
-            opacity: 0.55;
-            transition: opacity 0.15s ease, color 0.15s ease;
-        }
-
-        .dscf-msgnav-toggle:hover,
-        .dscf-msgnav-toggle.is-active {
-            opacity: 1;
-            color: #6770FE;
-        }
-
-        .dscf-msgnav-rail {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 6px;
-            max-height: 100%;
-            overflow: hidden;
-        }
-
-        .dscf-msgnav-dot {
-            flex: 0 0 auto;
-            width: 6px;
-            height: 6px;
-            padding: 0;
-            border: 0;
-            border-radius: 999px;
-            background: currentColor;
-            opacity: 0.22;
-            cursor: pointer;
-            transition: opacity 0.15s ease, background-color 0.15s ease, width 0.15s ease;
-        }
-
-        .dscf-msgnav-dot:hover {
-            opacity: 0.7;
-        }
-
-        .dscf-msgnav-dot.is-active {
-            background: #6770FE;
-            opacity: 1;
-            width: 10px !important;
-        }
-
-        /* 面板绝对定位到圆点左侧，避免被视口右缘裁掉 */
-        .dscf-msgnav-panel {
-            position: absolute;
-            top: 0;
-            right: calc(100% + 8px);
-            pointer-events: auto;
-            display: flex;
-            flex-direction: column;
-            width: 300px;
-            max-height: min(60vh, var(--dscf-msgnav-height, 400px));
-            border-radius: 12px;
-            background: var(--dscf-panel-bg, rgba(255, 255, 255, 0.98));
-            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
-            border: 1px solid rgba(127, 127, 127, 0.16);
-            overflow: hidden;
-        }
-
-        .dscf-msgnav-panel[hidden] {
-            display: none;
-        }
-
-        .dscf-msgnav-head {
-            flex: 0 0 auto;
-            padding: 10px 12px 6px;
-            font-size: 12px;
-            font-weight: 600;
-            opacity: 0.6;
-        }
-
+        /* 胶囊本体：34px 收起、240px 展开，尺寸变化由 width 过渡承载 */
         .dscf-msgnav-list {
-            flex: 1 1 auto;
-            overflow-y: auto;
-            padding: 0 6px 8px;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            width: 34px;
+            padding: 4px 0;
+            box-sizing: border-box;
+            border-radius: 16px;
+            overflow: hidden;
+            background-color: var(--dscf-nav-bg, rgba(255, 255, 255, 0.8));
+            backdrop-filter: blur(5px);
+            transition: width 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
         }
 
-        .dscf-msgnav-item {
+        /* 展开后列表可滚动，上下各盖一层同色渐变，和原生导航的滚动边缘一致 */
+        .dscf-msgnav-list::before,
+        .dscf-msgnav-list::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 24px;
+            z-index: 2;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .dscf-msgnav-list::before {
+            top: 0;
+            background: linear-gradient(var(--dscf-nav-bg-solid, #ffffff), transparent);
+        }
+
+        .dscf-msgnav-list::after {
+            bottom: 0;
+            background: linear-gradient(transparent, var(--dscf-nav-bg-solid, #ffffff));
+        }
+
+        .dscf-msgnav:hover .dscf-msgnav-list::before,
+        .dscf-msgnav:hover .dscf-msgnav-list::after,
+        .dscf-msgnav:focus-within .dscf-msgnav-list::before,
+        .dscf-msgnav:focus-within .dscf-msgnav-list::after {
+            opacity: 1;
+        }
+
+        .dscf-msgnav-items {
+            flex: 1 1 auto;
             display: flex;
-            align-items: flex-start;
-            gap: 8px;
-            width: 100%;
-            padding: 7px 8px;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        .dscf-msgnav-items::-webkit-scrollbar {
+            width: 0;
+        }
+
+        .dscf-msgnav:hover .dscf-msgnav-list,
+        .dscf-msgnav:focus-within .dscf-msgnav-list {
+            width: 240px;
+            background-color: var(--dscf-nav-bg-solid, #ffffff);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+        }
+
+        /* 一项一条消息：标题靠左、横线贴右；收起时标题透明，只留横线 */
+        .dscf-msgnav-item {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            width: calc(100% - 6px);
+            height: 30px;
+            margin-right: 8px;
+            padding: 0;
             border: 0;
             border-radius: 8px;
             background: transparent;
@@ -379,48 +357,72 @@
             cursor: pointer;
         }
 
-        .dscf-msgnav-item:hover {
-            background: rgba(103, 112, 254, 0.10);
-        }
-
-        .dscf-msgnav-item.is-active {
-            background: rgba(103, 112, 254, 0.16);
-        }
-
-        .dscf-msgnav-item > i {
-            flex: 0 0 12px;
-            margin-top: 4px;
-            font-size: 10px;
-            opacity: 0.55;
-            text-align: center;
-        }
-
-        .dscf-msgnav-text {
+        .dscf-msgnav-title {
             flex: 1 1 auto;
             min-width: 0;
-            font-size: 12px;
-            line-height: 1.5;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
+            margin-right: 12px;
+            font-size: 13px;
+            line-height: 20px;
+            white-space: nowrap;
             overflow: hidden;
+            text-overflow: ellipsis;
+            color: var(--dscf-fg, #262626);
+            opacity: 0;
+            transition: opacity 0.1s ease, color 0.2s ease;
         }
 
-        .dscf-msgnav-index {
-            flex: 0 0 auto;
-            font-size: 10px;
-            opacity: 0.4;
-            margin-top: 2px;
+        .dscf-msgnav:hover .dscf-msgnav-title,
+        .dscf-msgnav:focus-within .dscf-msgnav-title {
+            opacity: 1;
+        }
+
+        /* 横线的定位盒固定 16×20，横线本身 8×2；当前项放大 1.5 倍并变成品牌色 */
+        .dscf-msgnav-indicator {
+            flex: 0 0 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 20px;
+        }
+
+        .dscf-msgnav-line {
+            width: 8px;
+            height: 2px;
+            border-radius: 4px;
+            background-color: var(--dscf-line, #c9c9c9);
+            transition: background-color 0.2s ease, transform 0.2s ease;
+        }
+
+        .dscf-msgnav-item:hover .dscf-msgnav-line {
+            background-color: var(--dscf-fg, #262626);
+        }
+
+        .dscf-msgnav-item:hover .dscf-msgnav-title {
+            color: var(--dscf-fg, #262626);
+        }
+
+        .dscf-msgnav-item.is-active .dscf-msgnav-line {
+            background-color: var(--dscf-brand, #4d6bfe);
+            transform: scale(1.5);
+        }
+
+        .dscf-msgnav-item.is-active .dscf-msgnav-title {
+            color: var(--dscf-brand, #4d6bfe);
+            font-weight: 500;
         }
 
         /* 深色主题：各站点标记不同（ChatGPT/Grok 用 html.dark，DeepSeek 用 body.dark，
-           Gemini 用 dark-theme / data-theme），全部跟随，避免深色底上画出深色圆点 */
+           Gemini 用 dark-theme / data-theme），全部跟随，免得深色底上画出浅色胶囊 */
         html.dark .dscf-msgnav,
         body.dark .dscf-msgnav,
         .dark-theme .dscf-msgnav,
         [data-theme="dark"] .dscf-msgnav {
             --dscf-fg: #e6e8eb;
-            --dscf-panel-bg: rgba(38, 40, 44, 0.98);
+            --dscf-line: rgba(255, 255, 255, 0.28);
+            --dscf-brand: #7a92ff;
+            --dscf-nav-bg: rgba(21, 21, 23, 0.6);
+            --dscf-nav-bg-solid: #1b1b1d;
         }
 
         /* 跳转目标短暂高亮 */
@@ -1849,13 +1851,8 @@
 		entries: [],
 		signature: "",
 		root: null,
-		rail: null,
-		dots: [],
-		toggle: null,
-		panel: null,
 		list: null,
 		rows: [],
-		open: false,
 		activeKey: null,
 		observer: null,
 		onScroll: null,
@@ -1863,7 +1860,6 @@
 		href: location.href,
 		refreshTimer: null,
 		watchTimer: null,
-		layoutFrame: 0,
 		flashing: new Map()
 	};
 	function readText(el) {
@@ -1927,9 +1923,6 @@
 	function makeSignature(entries) {
 		return entries.map((entry) => entry.key + ":" + entry.text.slice(0, 12)).join("|");
 	}
-	function isUserEntry(entry) {
-		return entry.role === "USER";
-	}
 	function findBlock(entry) {
 		if (entry.el && entry.el.isConnected) return entry.el;
 		return getMessageBlocks()[Number(entry.key)] || null;
@@ -1943,7 +1936,6 @@
 		});
 		flashEntry(block);
 		setActive(entry.key);
-		closePanel();
 	}
 	function flashEntry(block) {
 		clearTimeout(state.flashing.get(block));
@@ -1964,40 +1956,10 @@
 	function setActive(key) {
 		if (state.activeKey === key) return;
 		state.activeKey = key;
-		state.dots.forEach((dot) => dot.classList.toggle("is-active", dot.dataset.key === key));
-		state.rows.forEach((row) => row.classList.toggle("is-active", row.dataset.key === key));
-	}
-	function scheduleLayout() {
-		cancelAnimationFrame(state.layoutFrame);
-		state.layoutFrame = requestAnimationFrame(() => {
-			updateLayout();
-			updateRailSpacing();
-		});
-	}
-	function updateLayout() {
-		const scroller = state.scroller;
-		const root = state.root;
-		if (!scroller || !root) return;
-		const rect = scroller.getBoundingClientRect();
-		const left = Math.min(rect.right, window.innerWidth) - 36;
-		const top = Math.max(rect.top + 48, 0);
-		const height = Math.max(160, rect.height - 120);
-		root.style.left = `${Math.round(left)}px`;
-		root.style.top = `${Math.round(top)}px`;
-		root.style.height = `${Math.round(height)}px`;
-		root.style.setProperty("--dscf-msgnav-height", `${Math.round(height)}px`);
-	}
-	function updateRailSpacing() {
-		if (!state.rail) return;
-		const count = state.entries.length;
-		const height = parseFloat(getComputedStyle(state.root).getPropertyValue("--dscf-msgnav-height")) || 0;
-		const slot = count ? height / count : 0;
-		const size = Math.max(2, Math.min(6, slot * .6));
-		const gap = Math.max(0, Math.min(8, slot - size));
-		state.rail.style.gap = `${Math.round(gap * 10) / 10}px`;
-		state.dots.forEach((dot) => {
-			dot.style.height = `${Math.round(size * 10) / 10}px`;
-			dot.style.width = `${Math.round(Math.max(2, size) * 10) / 10}px`;
+		state.rows.forEach((row) => {
+			const active = row.dataset.key === key;
+			row.classList.toggle("is-active", active);
+			if (active && state.root && state.root.matches(":hover")) row.scrollIntoView({ block: "nearest" });
 		});
 	}
 	function ensureDom() {
@@ -2005,120 +1967,54 @@
 		const root = document.createElement("div");
 		root.className = "dscf-msgnav";
 		root.setAttribute(NAV_ATTR, "1");
-		const side = document.createElement("div");
-		side.className = "dscf-msgnav-side";
-		const toggle = document.createElement("button");
-		toggle.type = "button";
-		toggle.className = "dscf-msgnav-toggle";
-		toggle.title = "消息导航";
-		toggle.innerHTML = "<i class=\"fa-solid fa-list-ul\"></i>";
-		toggle.addEventListener("click", togglePanel);
-		const rail = document.createElement("div");
-		rail.className = "dscf-msgnav-rail";
-		const panel = document.createElement("div");
-		panel.className = "dscf-msgnav-panel";
-		panel.hidden = true;
-		const head = document.createElement("div");
-		head.className = "dscf-msgnav-head";
 		const list = document.createElement("div");
 		list.className = "dscf-msgnav-list";
-		panel.append(head, list);
-		side.append(toggle, rail);
-		root.append(side, panel);
+		const items = document.createElement("div");
+		items.className = "dscf-msgnav-items";
+		list.append(items);
+		root.append(list);
 		document.body.appendChild(root);
 		state.root = root;
-		state.rail = rail;
-		state.toggle = toggle;
-		state.panel = panel;
-		state.list = list;
-		document.addEventListener("mousedown", onDocumentMouseDown, true);
-		document.addEventListener("keydown", onDocumentKeyDown, true);
-		window.addEventListener("resize", scheduleLayout);
+		state.list = items;
 	}
-	function onDocumentMouseDown(event) {
-		if (!state.open) return;
-		if (state.root && state.root.contains(event.target)) return;
-		closePanel();
-	}
-	function onDocumentKeyDown(event) {
-		if (event.key === "Escape" && state.open) closePanel();
-	}
-	function renderRail() {
-		ensureDom();
-		state.dots.forEach((dot) => dot.remove());
-		state.dots = state.entries.map((entry) => {
-			const dot = document.createElement("button");
-			dot.type = "button";
-			dot.className = "dscf-msgnav-dot";
-			dot.classList.toggle("is-active", entry.key === state.activeKey);
-			dot.dataset.key = entry.key;
-			dot.title = `${isUserEntry(entry) ? "我" : "回答"}：${entry.text || "（无正文）"}`.slice(0, 120);
-			dot.addEventListener("click", () => jumpTo(entry));
-			state.rail.appendChild(dot);
-			return dot;
-		});
-		state.toggle.classList.toggle("is-active", state.open);
-	}
-	function renderList() {
+	function renderItems() {
 		ensureDom();
 		state.rows.forEach((row) => row.remove());
-		state.rows = state.entries.map((entry, index) => {
+		state.rows = state.entries.map((entry) => {
 			const row = document.createElement("button");
 			row.type = "button";
 			row.className = "dscf-msgnav-item";
 			row.classList.toggle("is-active", entry.key === state.activeKey);
 			row.dataset.key = entry.key;
-			const icon = document.createElement("i");
-			icon.className = isUserEntry(entry) ? "fa-solid fa-user" : "fa-solid fa-robot";
-			const text = document.createElement("span");
-			text.className = "dscf-msgnav-text";
-			text.textContent = entry.text || "（无正文）";
-			text.title = entry.text || "";
-			const badge = document.createElement("span");
-			badge.className = "dscf-msgnav-index";
-			badge.textContent = String(index + 1);
-			row.append(icon, text, badge);
+			const title = document.createElement("span");
+			title.className = "dscf-msgnav-title";
+			title.textContent = entry.text || "（无正文）";
+			title.title = entry.text || "";
+			const indicator = document.createElement("span");
+			indicator.className = "dscf-msgnav-indicator";
+			const line = document.createElement("span");
+			line.className = "dscf-msgnav-line";
+			indicator.append(line);
+			row.append(title, indicator);
 			row.addEventListener("click", () => jumpTo(entry));
 			state.list.appendChild(row);
 			return row;
 		});
-		state.panel.querySelector(".dscf-msgnav-head").textContent = `消息导航 · ${state.entries.length}`;
 	}
 	function syncVisibility() {
 		if (!state.root) return;
-		const visible = state.entries.length >= MIN_ENTRIES;
-		state.root.classList.toggle("is-visible", visible);
-		if (!visible && state.open) closePanel();
-	}
-	function togglePanel() {
-		if (state.open) {
-			closePanel();
-			return;
-		}
-		state.open = true;
-		state.panel.hidden = false;
-		state.toggle.classList.add("is-active");
-		state.rows.find((row) => row.dataset.key === state.activeKey)?.scrollIntoView({ block: "nearest" });
-	}
-	function closePanel() {
-		state.open = false;
-		state.toggle?.classList.remove("is-active");
-		if (state.panel) state.panel.hidden = true;
+		state.root.classList.toggle("is-visible", state.entries.length >= MIN_ENTRIES);
 	}
 	function attachScroller(scroller) {
 		detachScroller();
 		state.scroller = scroller;
-		state.onScroll = () => {
-			updateActive();
-			scheduleLayout();
-		};
+		state.onScroll = () => updateActive();
 		scroller.addEventListener("scroll", state.onScroll, { passive: true });
 		state.observer = new MutationObserver(scheduleRefresh);
 		state.observer.observe(scroller, {
 			childList: true,
 			subtree: true
 		});
-		scheduleLayout();
 	}
 	function detachScroller() {
 		if (state.scroller && state.onScroll) state.scroller.removeEventListener("scroll", state.onScroll);
@@ -2148,17 +2044,13 @@
 		const signature = makeSignature(entries);
 		if (signature === state.signature) {
 			syncVisibility();
-			scheduleLayout();
 			updateActive();
 			return;
 		}
 		state.signature = signature;
 		state.entries = entries;
-		renderRail();
-		renderList();
+		renderItems();
 		syncVisibility();
-		updateLayout();
-		updateRailSpacing();
 		updateActive();
 	}
 	function scheduleWatch() {
@@ -2190,21 +2082,12 @@
 		state.watchTimer = null;
 		clearInterval(state.historyTimer);
 		state.historyTimer = null;
-		cancelAnimationFrame(state.layoutFrame);
 		state.flashing.forEach((timer) => clearTimeout(timer));
 		state.flashing.clear();
-		document.removeEventListener("mousedown", onDocumentMouseDown, true);
-		document.removeEventListener("keydown", onDocumentKeyDown, true);
-		window.removeEventListener("resize", scheduleLayout);
 		state.root?.remove();
 		state.root = null;
-		state.rail = null;
-		state.toggle = null;
-		state.panel = null;
 		state.list = null;
-		state.dots = [];
 		state.rows = [];
-		state.open = false;
 		state.entries = [];
 		state.activeKey = null;
 		state.signature = "";
