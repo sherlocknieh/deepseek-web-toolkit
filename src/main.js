@@ -1,5 +1,5 @@
 import { runtime } from './runtime.js';
-import { addCSSClass } from './styles.js';
+import { addCSSClass, addIconFont } from './styles.js';
 import { waitFor } from './utils.js';
 import { getOriginalAnchors } from './dom.js';
 import { rebuild, observeChatList } from './observer.js';
@@ -44,17 +44,20 @@ function checkFrontUpdating() {
 
 const isDeepSeek = location.hostname === 'chat.deepseek.com';
 
-// 入口：先修好公式复制，再等侧栏出现会话后原地重排一次，并开始监听变化
+// 入口：先注入样式，再等侧栏出现会话后原地重排一次，并开始监听变化
 function main() {
     addCSSClass();
-    initKatexCopy();
 
-    // 会话目录依赖 DeepSeek 侧栏结构，其他站点只启用消息导航
+    // 会话目录依赖 DeepSeek 侧栏结构，其他站点只启用消息导航；
+    // 图标字体和公式复制补丁都是 DeepSeek 专属，其他站点注入会被 CSP 拦下并中断初始化
     if (!isDeepSeek) {
         console.log('[DeepSeek 工具箱] 脚本已加载（消息导航）');
         initMessageNav();
         return;
     }
+
+    addIconFont();
+    initKatexCopy();
 
     console.log('[DeepSeek 工具箱] 脚本已加载，等待会话列表…');
 

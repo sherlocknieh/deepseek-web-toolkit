@@ -1,14 +1,7 @@
-// 注入图标字体和目录行样式；列表重排只依赖 flex 的 order，不改动会话项本身
+// 注入目录行和导航样式；列表重排只依赖 flex 的 order，不改动会话项本身
 export function addCSSClass() {
     // 热更新时先移除旧样式，避免重复注入
-    document.getElementById('dscf-fontawesome')?.remove();
     document.getElementById('dscf-style')?.remove();
-
-    const iconLink = document.createElement('link');
-    iconLink.id = 'dscf-fontawesome';
-    iconLink.rel = 'stylesheet';
-    iconLink.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css';
-    document.head.appendChild(iconLink);
 
     const style = document.createElement('style');
     style.id = 'dscf-style';
@@ -235,8 +228,8 @@ export function addCSSClass() {
 
         .dscf-msgnav:hover .dscf-msgnav-list::before,
         .dscf-msgnav:hover .dscf-msgnav-list::after,
-        .dscf-msgnav:focus-within .dscf-msgnav-list::before,
-        .dscf-msgnav:focus-within .dscf-msgnav-list::after {
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-list::before,
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-list::after {
             opacity: 1;
         }
 
@@ -252,7 +245,7 @@ export function addCSSClass() {
         }
 
         .dscf-msgnav:hover .dscf-msgnav-list,
-        .dscf-msgnav:focus-within .dscf-msgnav-list {
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-list {
             width: 240px;
             background-color: var(--dscf-nav-bg-solid, #ffffff);
             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
@@ -292,7 +285,7 @@ export function addCSSClass() {
         }
 
         .dscf-msgnav:hover .dscf-msgnav-title,
-        .dscf-msgnav:focus-within .dscf-msgnav-title {
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-title {
             opacity: 1;
         }
 
@@ -377,4 +370,15 @@ export function addCSSClass() {
         }
     `;
     document.head.appendChild(style);
+}
+
+// 目录行靠 Font Awesome 画文件夹图标；其他站点只用内联样式，不加载外部字体
+export function addIconFont() {
+    document.getElementById('dscf-fontawesome')?.remove();
+
+    const iconLink = document.createElement('link');
+    iconLink.id = 'dscf-fontawesome';
+    iconLink.rel = 'stylesheet';
+    iconLink.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css';
+    document.head.appendChild(iconLink);
 }

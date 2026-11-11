@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 网页端工具箱 - LaTeX 公式复制 & 会话文件夹 & 消息导航 & 折叠思考
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.12.0257
+// @version      2026.11.12.0308
 // @author       sherlocknieh
 // @description  增强 DeepSeek 网页端使用体验: 会话文件夹 + 消息导航 + KaTeX 公式复制修正 + 默认折叠思考。
 // @license      MIT
@@ -83,13 +83,7 @@
 		return typeof _unsafeWindow !== "undefined" && _unsafeWindow ? _unsafeWindow : window;
 	}
 	function addCSSClass() {
-		document.getElementById("dscf-fontawesome")?.remove();
 		document.getElementById("dscf-style")?.remove();
-		const iconLink = document.createElement("link");
-		iconLink.id = "dscf-fontawesome";
-		iconLink.rel = "stylesheet";
-		iconLink.href = "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css";
-		document.head.appendChild(iconLink);
 		const style = document.createElement("style");
 		style.id = "dscf-style";
 		style.textContent = `
@@ -315,8 +309,8 @@
 
         .dscf-msgnav:hover .dscf-msgnav-list::before,
         .dscf-msgnav:hover .dscf-msgnav-list::after,
-        .dscf-msgnav:focus-within .dscf-msgnav-list::before,
-        .dscf-msgnav:focus-within .dscf-msgnav-list::after {
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-list::before,
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-list::after {
             opacity: 1;
         }
 
@@ -332,7 +326,7 @@
         }
 
         .dscf-msgnav:hover .dscf-msgnav-list,
-        .dscf-msgnav:focus-within .dscf-msgnav-list {
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-list {
             width: 240px;
             background-color: var(--dscf-nav-bg-solid, #ffffff);
             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
@@ -372,7 +366,7 @@
         }
 
         .dscf-msgnav:hover .dscf-msgnav-title,
-        .dscf-msgnav:focus-within .dscf-msgnav-title {
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-title {
             opacity: 1;
         }
 
@@ -457,6 +451,14 @@
         }
     `;
 		document.head.appendChild(style);
+	}
+	function addIconFont() {
+		document.getElementById("dscf-fontawesome")?.remove();
+		const iconLink = document.createElement("link");
+		iconLink.id = "dscf-fontawesome";
+		iconLink.rel = "stylesheet";
+		iconLink.href = "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css";
+		document.head.appendChild(iconLink);
 	}
 	function waitFor(cond, func, timeout = 6e4) {
 		if (cond()) {
@@ -1864,7 +1866,7 @@
 	};
 	function readText(el) {
 		const clone = (ADAPTER && ADAPTER.content ? ADAPTER.content(el) : el).cloneNode(true);
-		clone.querySelectorAll("button, svg, [aria-hidden=\"true\"], nav, form").forEach((node) => node.remove());
+		clone.querySelectorAll("button, svg, [aria-hidden=\"true\"], nav, form, .cdk-visually-hidden").forEach((node) => node.remove());
 		return (clone.textContent || "").replace(/\s+/g, " ").trim();
 	}
 	function detectRole(el, index) {
@@ -2246,12 +2248,13 @@
 	var isDeepSeek = location.hostname === "chat.deepseek.com";
 	function main() {
 		addCSSClass();
-		initKatexCopy();
 		if (!isDeepSeek) {
 			console.log("[DeepSeek 工具箱] 脚本已加载（消息导航）");
 			initMessageNav();
 			return;
 		}
+		addIconFont();
+		initKatexCopy();
 		console.log("[DeepSeek 工具箱] 脚本已加载，等待会话列表…");
 		initThinkCollapse();
 		waitFor(() => getOriginalAnchors().length > 0, () => {

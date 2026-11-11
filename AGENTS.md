@@ -39,7 +39,7 @@ npm run release --dry-run      # 只预览版本号
 | `observer.js` | 变更监听、签名、防抖重排 |
 | `drag.js` | 拖动/放置判定、移动执行、占位清理 |
 | `folder.js` | 整目录子树改名与占位迁移（拖动与重命名共用） |
-| `styles.js` | 注入 Font Awesome 和目录/拖动样式 |
+| `styles.js` | 注入目录/拖动/导航样式；图标字体单独按需加载 |
 | `utils.js` | 启动等待 |
 
 ## 关键不变量
@@ -59,7 +59,9 @@ npm run release --dry-run      # 只预览版本号
 
 ## 启动与热更新
 
-`main.js` → `addCSSClass` / `initKatexCopy` / `initThinkCollapse` → `waitFor` 侧栏会话 → `checkFrontUpdating` → `rebuild(true)` → `observeChatList` / `initDragAndDrop` / `listenDomain`。
+`main.js` → `addCSSClass` →（仅 DeepSeek）`addIconFont` / `initKatexCopy` / `initThinkCollapse` → `waitFor` 侧栏会话 → `checkFrontUpdating` → `rebuild(true)` → `observeChatList` / `initDragAndDrop` / `listenDomain`。
+
+非 DeepSeek 站点只注入内联样式并启动消息导航：图标字体在 cdnjs、copy-tex 在 jsdelivr，会被 ChatGPT / Gemini 的 CSP 拦下，Gemini 还会因 Trusted Types 在设置 `script.src` 时抛错，所以这两项必须留在 DeepSeek 分支。
 
 `runtime.js` 在模块加载时回收上一轮实例；HMR 可能只重跑 `main.js`，入口再用 `runtime.initialized` 判断并 `runtime.dispose()`，清理函数登记在 `runtime.disposers`。
 
@@ -112,4 +114,4 @@ cp -a "$SRC/Default/Local Storage" "$DST/Default/Local Storage"
 - 构建：`npm run build`；发布：`npm run release "feat: …"`（钩子走同一套升版本+构建，发布脚本用 `--no-verify` 跳过）。
 - 真机：控制台出现 `[DeepSeek 工具箱] 脚本已加载` 和 `已初始化，会话数 N`；确认只有置顶区成目录、叶子只显示末段、未置顶斜杠会话平铺、拖动/置顶/改名可用、新建与删除空目录正常。
 - 确认打开会话时已完成的思考块默认收起、思考输出中保持展开、手动展开后不再被收起。
-- 确认右侧原生消息导航全程常显且不压正文，缩放跨过 768px 时导航不闪、右边距不跳变；其他站点出现右侧胶囊，收起是一列横线，悬停展开消息列表，点击可跳转，当前项横线加粗变蓝。
+- 确认右侧原生消息导航全程常显且不压正文，缩放跨过 768px 时导航不闪、右边距不跳变；其他站点出现右侧胶囊，收起是一列横线，悬停展开消息列表（移开即收回），点击可跳转，当前项横线加粗变蓝。

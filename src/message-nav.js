@@ -25,7 +25,7 @@ const SITE_ADAPTERS = [
         hosts: ['gemini.google.com'],
         selector: 'user-query, model-response',
         role: el => (el.tagName.toLowerCase() === 'user-query' ? 'USER' : 'ASSISTANT'),
-        // 正文只在气泡内，避免把「你说 / Gemini 说」这类标签和工具栏带进列表
+        // 正文只在气泡内；「你说」这类读屏副本由 readText 统一剔除
         content: el => el.querySelector('div.query-content') || el.querySelector('message-content') || el,
         scroller: 'infinite-scroller, #chat-history'
     },
@@ -79,7 +79,8 @@ const state = {
 function readText(el) {
     const source = ADAPTER && ADAPTER.content ? ADAPTER.content(el) : el;
     const clone = source.cloneNode(true);
-    clone.querySelectorAll('button, svg, [aria-hidden="true"], nav, form').forEach(node => node.remove());
+    // .cdk-visually-hidden 是 Gemini 给读屏软件复述的提问文本，和正文重复
+    clone.querySelectorAll('button, svg, [aria-hidden="true"], nav, form, .cdk-visually-hidden').forEach(node => node.remove());
     return (clone.textContent || '').replace(/\s+/g, ' ').trim();
 }
 
