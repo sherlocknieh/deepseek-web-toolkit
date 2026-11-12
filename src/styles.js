@@ -336,9 +336,10 @@ export function addCSSClass() {
             --dscf-nav-active: #679efe;
         }
 
-        /* 跳转目标的气泡短暂高亮；圆角沿用气泡自己的，不在这里改形状 */
+        /* 跳转目标的气泡短暂高亮，时长与 message-nav.js 的 FLASH_MS 一致；
+           圆角沿用气泡自己的，不在这里改形状 */
         [data-dscf-flash] {
-            animation: dscf-flash 1.6s ease-out;
+            animation: dscf-flash 0.6s ease-out;
         }
 
         @keyframes dscf-flash {

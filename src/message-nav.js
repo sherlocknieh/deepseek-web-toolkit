@@ -10,7 +10,7 @@ import { runtime } from './runtime.js';
 
 // 有一条提问就出导航：DeepSeek 原生导航同样单条提问即常显，这里保持一致
 const NAV_ATTR = 'data-dscf-msgnav';
-const FLASH_MS = 1600;
+const FLASH_MS = 600;
 const MIN_ENTRIES = 1;
 
 // 站点适配：每种站点只声明自己的消息块选择器、角色判定、正文范围和滚动容器。

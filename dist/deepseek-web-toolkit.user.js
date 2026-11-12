@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 网页端工具箱 - LaTeX 公式复制 & 会话文件夹 & 消息导航 & 折叠思考
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.12.1335
+// @version      2026.11.12.1342
 // @author       sherlocknieh
 // @description  增强 DeepSeek 网页端使用体验: 会话文件夹 + 消息导航 + KaTeX 公式复制修正 + 默认折叠思考。
 // @license      MIT
@@ -417,9 +417,10 @@
             --dscf-nav-active: #679efe;
         }
 
-        /* 跳转目标的气泡短暂高亮；圆角沿用气泡自己的，不在这里改形状 */
+        /* 跳转目标的气泡短暂高亮，时长与 message-nav.js 的 FLASH_MS 一致；
+           圆角沿用气泡自己的，不在这里改形状 */
         [data-dscf-flash] {
-            animation: dscf-flash 1.6s ease-out;
+            animation: dscf-flash 0.6s ease-out;
         }
 
         @keyframes dscf-flash {
@@ -1809,7 +1810,7 @@
 		document.head.appendChild(script);
 	}
 	var NAV_ATTR = "data-dscf-msgnav";
-	var FLASH_MS = 1600;
+	var FLASH_MS = 600;
 	var MIN_ENTRIES = 1;
 	var SITE_ADAPTERS = [
 		{
