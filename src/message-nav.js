@@ -1,16 +1,16 @@
 import { runtime } from './runtime.js';
 
-// 通用消息导航：复刻 DeepSeek 原生导航——右侧一颗胶囊收成一列横线，悬停展开消息列表，
-// 点击跳到对应消息。DeepSeek 自带原生导航，这里只在其他站点启用；实现只依赖 DOM，不碰站点内部实例。
+// 通用消息导航：复刻 DeepSeek 原生导航——右侧一颗胶囊收成一列横线，悬停展开提问列表，
+// 点击跳到对应提问。DeepSeek 自带原生导航，这里只在其他站点启用；实现只依赖 DOM，不碰站点内部实例。
 //
 // 识别规则：
 //   消息块 —— 按站点各自的结构取；没有适配的站点才退回通用语义标记
 //   滚动容器 —— 同时包含多条消息、内容最高的可滚动区块
-//   角色 —— 优先读站点标记，读不到时按提问/回答交替推断
+//   角色 —— 优先读站点标记，读不到时按提问/回答交替推断；只把提问放进导航
 
 const NAV_ATTR = 'data-dscf-msgnav';
 const FLASH_MS = 1600;
-const MIN_ENTRIES = 3;
+const MIN_ENTRIES = 2;
 
 // 站点适配：每种站点只声明自己的消息块选择器、角色判定、正文范围和滚动容器。
 // 不共用一个“全能选择器”，否则外层容器和它的子元素会同时命中，同一条消息被数两次
@@ -65,6 +65,7 @@ function resolveAdapter() {
 
 const state = {
     scroller: null,
+    topInset: 0,
     entries: [],
     signature: '',
     root: null,
@@ -154,14 +155,16 @@ function resolveScroller(blocks) {
         .sort((a, b) => b.scrollHeight - a.scrollHeight)[0] || null;
 }
 
-// 消息条目：key 用序号，站内消息 DOM 被重建后仍能重新定位
+// 消息条目：只列用户提问，回答不进导航；key 用消息块序号，站内 DOM 被重建后仍能重新定位
 function readEntries() {
-    return getMessageBlocks().map((el, index) => ({
-        key: String(index),
-        el,
-        role: detectRole(el, index),
-        text: readText(el)
-    }));
+    return getMessageBlocks()
+        .map((el, index) => ({
+            key: String(index),
+            el,
+            role: detectRole(el, index),
+            text: readText(el)
+        }))
+        .filter(isUserEntry);
 }
 
 function makeSignature(entries) {
@@ -177,6 +180,15 @@ function findBlock(entry) {
     return getMessageBlocks()[Number(entry.key)] || null;
 }
 
+// 站点可能在消息区顶部给悬浮标题留出高度（Grok 的滚动区从视口顶开始、首条消息往下让 128px）：
+// 这段留白就是首条消息距滚动原点的距离，跳转时让出来，目标才不会压在悬浮标题下面
+function readTopInset(scroller, blocks) {
+    if (!blocks.length) return 0;
+    const inset = blocks[0].getBoundingClientRect().top
+        - scroller.getBoundingClientRect().top + scroller.scrollTop;
+    return inset > 0 && inset < 200 ? inset : 0;
+}
+
 // 跳到目标消息：直接改滚动容器的 scrollTop。停在底部时站点（Grok 已确认）会把平滑滚动
 // 逐帧拉回底部，动画整段被吞掉，所以这里不做过渡动画；容器关系不明时才退回 scrollIntoView
 function jumpTo(entry) {
@@ -186,7 +198,8 @@ function jumpTo(entry) {
     const scroller = state.scroller;
     if (scroller && scroller.contains(block)) {
         scroller.scrollTop = Math.max(0, block.getBoundingClientRect().top
-            - scroller.getBoundingClientRect().top - scroller.clientTop + scroller.scrollTop);
+            - scroller.getBoundingClientRect().top - scroller.clientTop + scroller.scrollTop
+            - state.topInset);
     } else {
         block.scrollIntoView({ block: 'start' });
     }
@@ -203,11 +216,11 @@ function flashEntry(block) {
     state.flashing.set(block, timer);
 }
 
-// 横线高亮跟随滚动：最后一条越过视口上沿的消息就是当前读到的位置
+// 横线高亮跟随滚动：最后一条越过内容区顶端（悬浮标题之下那条线）的消息就是当前读到的位置
 function updateActive() {
     if (!state.entries.length || !state.scroller) return;
 
-    const limit = state.scroller.getBoundingClientRect().top + 96;
+    const limit = state.scroller.getBoundingClientRect().top + state.topInset + 1;
     let key = state.entries[0].key;
 
     for (const entry of state.entries) {
@@ -337,6 +350,7 @@ export function refreshMessageNav() {
     }
 
     if (scroller !== state.scroller) attachScroller(scroller);
+    state.topInset = readTopInset(scroller, entries.map(entry => entry.el));
 
     const signature = makeSignature(entries);
     if (signature === state.signature) {
@@ -400,6 +414,7 @@ export function teardownMessageNav() {
     state.entries = [];
     state.activeKey = null;
     state.signature = '';
+    state.topInset = 0;
 
     if (runtime.refreshMessageNav === refreshMessageNav) {
         runtime.refreshMessageNav = null;

@@ -163,7 +163,7 @@ export function addCSSClass() {
 
         /* 通用消息导航（其他站点用；DeepSeek 走原生导航）：几何照搬原生导航——
            右侧固定 34×300，收起时只露一颗 34×292 的毛玻璃胶囊和一列横线；
-           悬停后换成 240 宽、按内容高度垂直居中的实色消息列表 */
+           悬停后换成 240 宽、按内容高度垂直居中的实色提问列表 */
         .dscf-msgnav {
             --dscf-nav-bg: rgba(255, 255, 255, 0.8);
             --dscf-nav-solid: #ffffff;
@@ -204,8 +204,6 @@ export function addCSSClass() {
             width: 34px;
             height: calc(100% - 8px);
             border-radius: 16px;
-            background-color: var(--dscf-nav-bg);
-            backdrop-filter: blur(5px);
             transition: opacity 0.2s ease;
         }
 

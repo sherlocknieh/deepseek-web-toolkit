@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 网页端工具箱 - LaTeX 公式复制 & 会话文件夹 & 消息导航 & 折叠思考
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.12.1309
+// @version      2026.11.12.1320
 // @author       sherlocknieh
 // @description  增强 DeepSeek 网页端使用体验: 会话文件夹 + 消息导航 + KaTeX 公式复制修正 + 默认折叠思考。
 // @license      MIT
@@ -244,7 +244,7 @@
 
         /* 通用消息导航（其他站点用；DeepSeek 走原生导航）：几何照搬原生导航——
            右侧固定 34×300，收起时只露一颗 34×292 的毛玻璃胶囊和一列横线；
-           悬停后换成 240 宽、按内容高度垂直居中的实色消息列表 */
+           悬停后换成 240 宽、按内容高度垂直居中的实色提问列表 */
         .dscf-msgnav {
             --dscf-nav-bg: rgba(255, 255, 255, 0.8);
             --dscf-nav-solid: #ffffff;
@@ -285,8 +285,6 @@
             width: 34px;
             height: calc(100% - 8px);
             border-radius: 16px;
-            background-color: var(--dscf-nav-bg);
-            backdrop-filter: blur(5px);
             transition: opacity 0.2s ease;
         }
 
@@ -1817,7 +1815,7 @@
 	}
 	var NAV_ATTR = "data-dscf-msgnav";
 	var FLASH_MS = 1600;
-	var MIN_ENTRIES = 3;
+	var MIN_ENTRIES = 2;
 	var SITE_ADAPTERS = [
 		{
 			hosts: ["chatgpt.com", "chat.openai.com"],
@@ -1858,6 +1856,7 @@
 	}
 	var state = {
 		scroller: null,
+		topInset: 0,
 		entries: [],
 		signature: "",
 		root: null,
@@ -1928,20 +1927,28 @@
 			el,
 			role: detectRole(el, index),
 			text: readText(el)
-		}));
+		})).filter(isUserEntry);
 	}
 	function makeSignature(entries) {
 		return entries.map((entry) => entry.key + ":" + entry.text.slice(0, 12)).join("|");
+	}
+	function isUserEntry(entry) {
+		return entry.role === "USER";
 	}
 	function findBlock(entry) {
 		if (entry.el && entry.el.isConnected) return entry.el;
 		return getMessageBlocks()[Number(entry.key)] || null;
 	}
+	function readTopInset(scroller, blocks) {
+		if (!blocks.length) return 0;
+		const inset = blocks[0].getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+		return inset > 0 && inset < 200 ? inset : 0;
+	}
 	function jumpTo(entry) {
 		const block = findBlock(entry);
 		if (!block) return;
 		const scroller = state.scroller;
-		if (scroller && scroller.contains(block)) scroller.scrollTop = Math.max(0, block.getBoundingClientRect().top - scroller.getBoundingClientRect().top - scroller.clientTop + scroller.scrollTop);
+		if (scroller && scroller.contains(block)) scroller.scrollTop = Math.max(0, block.getBoundingClientRect().top - scroller.getBoundingClientRect().top - scroller.clientTop + scroller.scrollTop - state.topInset);
 		else block.scrollIntoView({ block: "start" });
 		flashEntry(block);
 		setActive(entry.key);
@@ -1954,7 +1961,7 @@
 	}
 	function updateActive() {
 		if (!state.entries.length || !state.scroller) return;
-		const limit = state.scroller.getBoundingClientRect().top + 96;
+		const limit = state.scroller.getBoundingClientRect().top + state.topInset + 1;
 		let key = state.entries[0].key;
 		for (const entry of state.entries) {
 			const block = findBlock(entry);
@@ -2052,6 +2059,7 @@
 			return;
 		}
 		if (scroller !== state.scroller) attachScroller(scroller);
+		state.topInset = readTopInset(scroller, entries.map((entry) => entry.el));
 		const signature = makeSignature(entries);
 		if (signature === state.signature) {
 			syncVisibility();
@@ -2102,6 +2110,7 @@
 		state.entries = [];
 		state.activeKey = null;
 		state.signature = "";
+		state.topInset = 0;
 		if (runtime.refreshMessageNav === refreshMessageNav) runtime.refreshMessageNav = null;
 	}
 	var NARROW_QUERY = "(max-width: 1200px)";
