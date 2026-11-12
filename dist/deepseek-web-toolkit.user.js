@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 网页端工具箱 - LaTeX 公式复制 & 会话文件夹 & 消息导航 & 折叠思考
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.12.0356
+// @version      2026.11.12.1309
 // @author       sherlocknieh
 // @description  增强 DeepSeek 网页端使用体验: 会话文件夹 + 消息导航 + KaTeX 公式复制修正 + 默认折叠思考。
 // @license      MIT
@@ -1940,10 +1940,9 @@
 	function jumpTo(entry) {
 		const block = findBlock(entry);
 		if (!block) return;
-		block.scrollIntoView({
-			behavior: "smooth",
-			block: "start"
-		});
+		const scroller = state.scroller;
+		if (scroller && scroller.contains(block)) scroller.scrollTop = Math.max(0, block.getBoundingClientRect().top - scroller.getBoundingClientRect().top - scroller.clientTop + scroller.scrollTop);
+		else block.scrollIntoView({ block: "start" });
 		flashEntry(block);
 		setActive(entry.key);
 	}

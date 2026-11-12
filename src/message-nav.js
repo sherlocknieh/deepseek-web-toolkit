@@ -177,11 +177,20 @@ function findBlock(entry) {
     return getMessageBlocks()[Number(entry.key)] || null;
 }
 
+// 跳到目标消息：直接改滚动容器的 scrollTop。停在底部时站点（Grok 已确认）会把平滑滚动
+// 逐帧拉回底部，动画整段被吞掉，所以这里不做过渡动画；容器关系不明时才退回 scrollIntoView
 function jumpTo(entry) {
     const block = findBlock(entry);
     if (!block) return;
 
-    block.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const scroller = state.scroller;
+    if (scroller && scroller.contains(block)) {
+        scroller.scrollTop = Math.max(0, block.getBoundingClientRect().top
+            - scroller.getBoundingClientRect().top - scroller.clientTop + scroller.scrollTop);
+    } else {
+        block.scrollIntoView({ block: 'start' });
+    }
+
     flashEntry(block);
     setActive(entry.key);
 }
