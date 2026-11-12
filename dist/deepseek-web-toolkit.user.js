@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 网页端工具箱 - LaTeX 公式复制 & 会话文件夹 & 消息导航 & 折叠思考
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.12.1357
+// @version      2026.11.12.1429
 // @author       sherlocknieh
 // @description  增强 DeepSeek 网页端使用体验: 会话文件夹 + 消息导航 + KaTeX 公式复制修正 + 默认折叠思考。
 // @license      MIT
@@ -1832,8 +1832,8 @@
 			hosts: ["gemini.google.com"],
 			selector: "user-query, model-response",
 			role: (el) => el.tagName.toLowerCase() === "user-query" ? "USER" : "ASSISTANT",
-			content: (el) => el.querySelector("div.query-content") || el.querySelector("message-content") || el,
-			bubble: (el) => el.querySelector("div.query-content"),
+			content: (el) => el.querySelector("div.query-content") || el.querySelector(".query-text") || el.querySelector("message-content") || el,
+			bubble: (el) => el.querySelector(".user-query-bubble-with-background") || el.querySelector("div.query-text") || el.querySelector("div.query-content"),
 			scroller: "infinite-scroller, #chat-history"
 		},
 		{
@@ -1950,10 +1950,11 @@
 		if (entry.el && entry.el.isConnected) return entry.el;
 		return getMessageBlocks()[Number(entry.key)] || null;
 	}
+	var JUMP_GAP = 12;
 	function readTopInset(scroller, blocks) {
-		if (!blocks.length) return 0;
+		if (!blocks.length) return JUMP_GAP;
 		const inset = blocks[0].getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
-		return inset > 0 && inset < 200 ? inset : 0;
+		return (inset > 0 && inset < 200 ? inset : 0) + JUMP_GAP;
 	}
 	function jumpTo(entry) {
 		const block = findBlock(entry);

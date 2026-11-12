@@ -34,8 +34,11 @@ const SITE_ADAPTERS = [
         selector: 'user-query, model-response',
         role: el => (el.tagName.toLowerCase() === 'user-query' ? 'USER' : 'ASSISTANT'),
         // 正文只在气泡内；「你说」这类读屏副本由 readText 统一剔除
-        content: el => el.querySelector('div.query-content') || el.querySelector('message-content') || el,
-        bubble: el => el.querySelector('div.query-content'),
+        content: el => el.querySelector('div.query-content') || el.querySelector('.query-text') || el.querySelector('message-content') || el,
+        // 提问气泡自带圆角底色，光晕要贴着它，不能画在整块 user-query 上
+        bubble: el => el.querySelector('.user-query-bubble-with-background')
+            || el.querySelector('div.query-text')
+            || el.querySelector('div.query-content'),
         scroller: 'infinite-scroller, #chat-history'
     },
     {
@@ -198,13 +201,16 @@ function findBlock(entry) {
     return getMessageBlocks()[Number(entry.key)] || null;
 }
 
+// 跳转落点比悬浮标题再低一点，气泡的上边框不会被标题边缘压住
+const JUMP_GAP = 12;
+
 // 站点可能在消息区顶部给悬浮标题留出高度（Grok 的滚动区从视口顶开始、首条消息往下让 128px）：
 // 这段留白就是首条消息距滚动原点的距离，跳转时让出来，目标才不会压在悬浮标题下面
 function readTopInset(scroller, blocks) {
-    if (!blocks.length) return 0;
+    if (!blocks.length) return JUMP_GAP;
     const inset = blocks[0].getBoundingClientRect().top
         - scroller.getBoundingClientRect().top + scroller.scrollTop;
-    return inset > 0 && inset < 200 ? inset : 0;
+    return (inset > 0 && inset < 200 ? inset : 0) + JUMP_GAP;
 }
 
 // 跳到目标消息：直接改滚动容器的 scrollTop。停在底部时站点（Grok 已确认）会把平滑滚动
