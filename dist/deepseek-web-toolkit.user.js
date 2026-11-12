@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 网页端工具箱 - LaTeX 公式复制 & 会话文件夹 & 消息导航 & 折叠思考
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.12.1333
+// @version      2026.11.12.1335
 // @author       sherlocknieh
 // @description  增强 DeepSeek 网页端使用体验: 会话文件夹 + 消息导航 + KaTeX 公式复制修正 + 默认折叠思考。
 // @license      MIT
@@ -269,12 +269,8 @@
             display: block;
         }
 
-        /* 和原生导航一致：窄屏不显示，避免胶囊压住正文 */
-        @media not all and (min-width: 768px) {
-            .dscf-msgnav {
-                display: none !important;
-            }
-        }
+        /* 窄屏也让出位置而不是整个隐藏：收起时只是右侧一条 34px 的胶囊，展开是悬停操作，
+           压住正文的范围有限，隐藏反而让窄屏用户完全用不到导航 */
 
         /* 胶囊底色单独一层：收起时只有它可见，展开后被列表的实色背景盖住 */
         .dscf-msgnav-pill {

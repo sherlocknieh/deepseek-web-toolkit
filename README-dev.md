@@ -25,7 +25,7 @@
 - 其他站点由 `src/message-nav.js` 启动：只依赖 DOM，按 `SITE_ADAPTERS` 里各自的适配项识别消息块、角色、正文范围和滚动容器；未适配站点才退回 `[data-message-author-role]`、`user-query`、`model-response`、`message-content`、`article` 这组通用标记
 - 各站点选择器：ChatGPT `[data-message-author-role]` / `[data-chatgpt-search-unit-key]` + `main`；Gemini `user-query, model-response`（正文取 `div.query-content` / `message-content`）+ `infinite-scroller`；Grok `div[id^='response-']`（用户消息靠 `[data-testid=user-message]` 判定，正文取 `.response-content-markdown`）+ `main`；DeepSeek `[data-virtual-list-item-key]`（回答里有 `.ds-markdown`）+ `.ds-scroll-area`，只在原生导航缺席时启用
 - 命中元素若被其他命中元素包含会被丢掉，避免容器和子元素重复计数；角色优先读标记，读不到时按提问/回答交替推断；导航只列用户提问，回答不进列表
-- 形态照搬 DeepSeek 原生导航（尺寸取自其线上样式）：fixed 右侧 16px、垂直居中、高 300px，收起 34px、悬停展开 240px；条目 30px 高，横线 8×2，当前项放大 1.5 倍并变品牌色；展开后列表可滚动并带上下同色渐隐；768px 以下整体隐藏
+- 形态照搬 DeepSeek 原生导航（尺寸取自其线上样式）：fixed 右侧 16px、垂直居中、高 300px，收起 34px、悬停展开 240px；条目 30px 高，横线 8×2，当前项放大 1.5 倍并变品牌色；展开后列表可滚动并带上下同色渐隐；窄屏也常显（不再按 768px 隐藏）
 - 跳转直接改滚动容器的 `scrollTop`：停在底部时站点（Grok 已确认）会把平滑滚动逐帧拉回，动画会被整段吞掉；同时按首条消息距滚动原点的距离让出悬浮标题高度，目标不会被压在标题下面
 - 横线高亮跟随滚动（悬停展开时自动滚进可见范围），阈值是内容区顶端那条线；跳转后短暂高亮目标气泡（`SITE_ADAPTERS.bubble`），不整行刷底
 - 只要识别到 1 条提问就常显（与 DeepSeek 原生导航一致）；SPA 切会话靠 700ms 地址栏轮询重新识别

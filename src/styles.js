@@ -188,12 +188,8 @@ export function addCSSClass() {
             display: block;
         }
 
-        /* 和原生导航一致：窄屏不显示，避免胶囊压住正文 */
-        @media not all and (min-width: 768px) {
-            .dscf-msgnav {
-                display: none !important;
-            }
-        }
+        /* 窄屏也让出位置而不是整个隐藏：收起时只是右侧一条 34px 的胶囊，展开是悬停操作，
+           压住正文的范围有限，隐藏反而让窄屏用户完全用不到导航 */
 
         /* 胶囊底色单独一层：收起时只有它可见，展开后被列表的实色背景盖住 */
         .dscf-msgnav-pill {
