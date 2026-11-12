@@ -8,9 +8,10 @@ import { runtime } from './runtime.js';
 //   滚动容器 —— 同时包含多条消息、内容最高的可滚动区块
 //   角色 —— 优先读站点标记，读不到时按提问/回答交替推断；只把提问放进导航
 
+// 有一条提问就出导航：DeepSeek 原生导航同样单条提问即常显，这里保持一致
 const NAV_ATTR = 'data-dscf-msgnav';
 const FLASH_MS = 1600;
-const MIN_ENTRIES = 2;
+const MIN_ENTRIES = 1;
 
 // 站点适配：每种站点只声明自己的消息块选择器、角色判定、正文范围和滚动容器。
 // 不共用一个“全能选择器”，否则外层容器和它的子元素会同时命中，同一条消息被数两次

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 网页端工具箱 - LaTeX 公式复制 & 会话文件夹 & 消息导航 & 折叠思考
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.12.1320
+// @version      2026.11.12.1322
 // @author       sherlocknieh
 // @description  增强 DeepSeek 网页端使用体验: 会话文件夹 + 消息导航 + KaTeX 公式复制修正 + 默认折叠思考。
 // @license      MIT
@@ -1815,7 +1815,7 @@
 	}
 	var NAV_ATTR = "data-dscf-msgnav";
 	var FLASH_MS = 1600;
-	var MIN_ENTRIES = 2;
+	var MIN_ENTRIES = 1;
 	var SITE_ADAPTERS = [
 		{
 			hosts: ["chatgpt.com", "chat.openai.com"],
