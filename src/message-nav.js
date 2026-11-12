@@ -54,8 +54,12 @@ const SITE_ADAPTERS = [
         selector: '[data-virtual-list-item-key]',
         role: el => (el.querySelector('.ds-markdown') ? 'ASSISTANT' : 'USER'),
         content: el => el.querySelector('.ds-message') || el,
-        // .ds-message 是满宽的行，气泡是它内部按内容撑开的一层
-        bubble: el => el.querySelector('.ds-message > div'),
+        // .ds-message 是满宽的行，气泡是它内部按内容撑开的一层；带附件时图片和文字各占一块，
+        // 高亮要落在文字气泡上而不是图片上
+        bubble: el => {
+            const bubbles = Array.from(el.querySelectorAll('.ds-message > div'));
+            return bubbles.find(node => (node.innerText || '').trim()) || bubbles[0];
+        },
         scroller: '.ds-scroll-area'
     }
 ];

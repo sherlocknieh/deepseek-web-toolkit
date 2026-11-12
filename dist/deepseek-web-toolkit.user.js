@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 网页端工具箱 - LaTeX 公式复制 & 会话文件夹 & 消息导航 & 折叠思考
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.12.1342
+// @version      2026.11.12.1348
 // @author       sherlocknieh
 // @description  增强 DeepSeek 网页端使用体验: 会话文件夹 + 消息导航 + KaTeX 公式复制修正 + 默认折叠思考。
 // @license      MIT
@@ -417,15 +417,19 @@
             --dscf-nav-active: #679efe;
         }
 
-        /* 跳转目标的气泡短暂高亮，时长与 message-nav.js 的 FLASH_MS 一致；
-           圆角沿用气泡自己的，不在这里改形状 */
+        /* 跳转目标的气泡边缘发光：只画光圈不铺底色，正文颜色不受影响；
+           时长与 message-nav.js 的 FLASH_MS 一致，圆角沿用气泡自己的 */
         [data-dscf-flash] {
             animation: dscf-flash 0.6s ease-out;
         }
 
         @keyframes dscf-flash {
-            from { background-color: rgba(103, 112, 254, 0.22); }
-            to { background-color: transparent; }
+            from {
+                box-shadow: 0 0 0 2px rgba(103, 112, 254, 0.7), 0 0 16px 4px rgba(103, 112, 254, 0.45);
+            }
+            to {
+                box-shadow: 0 0 0 2px rgba(103, 112, 254, 0), 0 0 0 0 rgba(103, 112, 254, 0);
+            }
         }
 
         /* 原生消息导航被前端在 768px 以下设成 display:none，宽屏也要悬停才露出。
@@ -1845,7 +1849,10 @@
 			selector: "[data-virtual-list-item-key]",
 			role: (el) => el.querySelector(".ds-markdown") ? "ASSISTANT" : "USER",
 			content: (el) => el.querySelector(".ds-message") || el,
-			bubble: (el) => el.querySelector(".ds-message > div"),
+			bubble: (el) => {
+				const bubbles = Array.from(el.querySelectorAll(".ds-message > div"));
+				return bubbles.find((node) => (node.innerText || "").trim()) || bubbles[0];
+			},
 			scroller: ".ds-scroll-area"
 		}
 	];
