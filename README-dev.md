@@ -40,7 +40,7 @@ npm run dev
 
 把终端输出的 `http://localhost:5173/__vite-plugin-monkey.install.user.js` 装进油猴，打开 https://chat.deepseek.com ，改 `src/main.js` 保存即热更新。
 
-注意：页面 CSP 会拦截 localhost 脚本（需 Disable-CSP 类扩展）；Chrome 142+ 需允许 Local network access。
+注意：严格 CSP 站点会拦 localhost 脚本。调试载入器优先复用页面 script 的 nonce（ChatGPT）；页面策略没有 nonce-source 时（Gemini）改由油猴请求取单文件包，再以页面允许的 `blob:` 执行，改代码后约 1 秒自动重载。Chrome 142+ 还需允许 Local network access，更新过载入器后要在油猴里重装一次 `server:` 版。
 
 ## 版本号与发布
 
@@ -52,7 +52,7 @@ npm run dev
 
 ## Firefox
 
-装构建版 `dist/deepseek-web-toolkit.user.js`；带 `server:` 前缀的调试版依赖 Vite 服务和 CSP 放行。控制台出现 `[DeepSeek 工具箱] 脚本已加载` 和 `已初始化，会话数 N` 即生效。
+装构建版 `dist/deepseek-web-toolkit.user.js`；带 `server:` 前缀的调试版依赖 Vite 服务（CSP 站点由载入器走 nonce 或 blob 单文件包，不依赖本地脚本源）。控制台出现 `[DeepSeek 工具箱] 脚本已加载` 和 `已初始化，会话数 N` 即生效。
 
 ## 结构
 
