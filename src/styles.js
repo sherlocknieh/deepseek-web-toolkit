@@ -336,19 +336,16 @@ export function addCSSClass() {
             --dscf-nav-active: #679efe;
         }
 
-        /* 跳转目标的气泡边缘发光：只画光圈不铺底色，正文颜色不受影响；
-           时长与 message-nav.js 的 FLASH_MS 一致，圆角沿用气泡自己的 */
-        [data-dscf-flash] {
-            animation: dscf-flash 0.6s ease-out;
-        }
-
-        @keyframes dscf-flash {
-            from {
-                box-shadow: 0 0 0 2px rgba(103, 112, 254, 0.7), 0 0 16px 4px rgba(103, 112, 254, 0.45);
-            }
-            to {
-                box-shadow: 0 0 0 2px rgba(103, 112, 254, 0), 0 0 0 0 rgba(103, 112, 254, 0);
-            }
+        /* 跳转目标的气泡边缘发光：只画光圈不铺底色，正文颜色不受影响。
+           气泡外面的包裹层带裁剪，光晕画在气泡上会缺一条边，所以铺一层固定定位的
+           叠层，尺寸与圆角每次按气泡实时对齐；淡出时长由 message-nav.js 的 FLASH_MS 决定 */
+        .dscf-halo {
+            position: fixed;
+            pointer-events: none;
+            z-index: 2147483000;
+            opacity: 0;
+            box-shadow: inset 0 0 0 2px rgba(103, 112, 254, 0.85),
+                0 0 16px 4px rgba(103, 112, 254, 0.45);
         }
 
         /* DeepSeek 原生消息导航由通用导航完全替代：直接隐藏，避免两套胶囊并存 */

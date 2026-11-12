@@ -99,7 +99,8 @@ const state = {
     href: location.href,
     refreshTimer: null,
     watchTimer: null,
-    flashing: new Map()
+    halo: null,
+    haloToken: 0
 };
 
 // 取消息正文：先按站点收敛到气泡元素，再去掉按钮和工具栏文案后压成单行
@@ -167,11 +168,14 @@ function resolveScroller(blocks) {
         node = node.parentElement;
     }
 
-    // 结构化标记都识别不到时，退回“最高的可滚动区块”
+    // 结构化标记都识别不到时，退回“最高的可滚动区块”。必须真的装着消息，
+    // 否则会挑中侧栏之类的滚动区，跳转就落到不相关的容器上
     return best || Array.from(document.querySelectorAll('*'))
         .filter(el => {
             const style = getComputedStyle(el);
-            return /(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 200;
+            return /(auto|scroll)/.test(style.overflowY)
+                && el.scrollHeight > el.clientHeight + 200
+                && blocks.some(block => el.contains(block));
         })
         .sort((a, b) => b.scrollHeight - a.scrollHeight)[0] || null;
 }
@@ -201,8 +205,9 @@ function findBlock(entry) {
     return getMessageBlocks()[Number(entry.key)] || null;
 }
 
-// 跳转落点比悬浮标题再低一点，气泡的上边框不会被标题边缘压住
-const JUMP_GAP = 12;
+// 跳转落点比悬浮标题再低一点：气泡边缘的光晕向外扩 16px，留出的距离要盖住这段，
+// 否则气泡虽然完整，光晕的上半圈会被滚动区顶端裁成一条直线
+const JUMP_GAP = 20;
 
 // 站点可能在消息区顶部给悬浮标题留出高度（Grok 的滚动区从视口顶开始、首条消息往下让 128px）：
 // 这段留白就是首条消息距滚动原点的距离，跳转时让出来，目标才不会压在悬浮标题下面
@@ -213,17 +218,30 @@ function readTopInset(scroller, blocks) {
     return (inset > 0 && inset < 200 ? inset : 0) + JUMP_GAP;
 }
 
+// 取元素自己的滚动父级：站点可能把滚动交给内层元素，state.scroller 未必包住目标
+function scrollParentOf(el) {
+    for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) {
+        const { overflowY } = getComputedStyle(node);
+        if (/(auto|scroll)/.test(overflowY) && node.scrollHeight > node.clientHeight + 4) return node;
+    }
+    return null;
+}
+
 // 跳到目标消息：直接改滚动容器的 scrollTop。停在底部时站点（Grok 已确认）会把平滑滚动
 // 逐帧拉回底部，动画整段被吞掉，所以这里不做过渡动画；容器关系不明时才退回 scrollIntoView
 function jumpTo(entry) {
     const block = findBlock(entry);
     if (!block) return;
 
-    const scroller = state.scroller;
-    if (scroller && scroller.contains(block)) {
+    const scroller = state.scroller && state.scroller.contains(block)
+        ? state.scroller
+        : scrollParentOf(block);
+    if (scroller) {
+        // 换用兜底容器时 topInset 得按它自己的留白重算，直接沿用别的容器会偏出到头
+        const inset = scroller === state.scroller ? state.topInset : readTopInset(scroller, [block]);
         scroller.scrollTop = Math.max(0, block.getBoundingClientRect().top
             - scroller.getBoundingClientRect().top - scroller.clientTop + scroller.scrollTop
-            - state.topInset);
+            - inset);
     } else {
         block.scrollIntoView({ block: 'start' });
     }
@@ -242,13 +260,56 @@ function roundedImageBox(block) {
     return img.parentElement;
 }
 
+// 光晕叠层：气泡外面的包裹层带裁剪，画在气泡自身上的外发光会被切掉上沿；
+// 这层固定定位在 body 下，按气泡的实际矩形对齐，站点的裁剪管不到它
+function ensureHalo() {
+    if (state.halo && state.halo.isConnected) return state.halo;
+    const halo = document.createElement('div');
+    halo.className = 'dscf-halo';
+    halo.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(halo);
+    state.halo = halo;
+    return halo;
+}
+
 // 跳转后短暂高亮气泡，提示定位到了哪条提问
 function flashEntry(block) {
     const bubble = (ADAPTER && ADAPTER.bubble ? ADAPTER.bubble(block) : null) || roundedImageBox(block) || block;
-    clearTimeout(state.flashing.get(bubble));
-    bubble.setAttribute('data-dscf-flash', '1');
-    const timer = setTimeout(() => bubble.removeAttribute('data-dscf-flash'), FLASH_MS);
-    state.flashing.set(bubble, timer);
+    const halo = ensureHalo();
+    const radius = getComputedStyle(bubble).borderRadius;
+
+    // 光晕只是个描边层，位置和尺寸完全跟着气泡的矩形走
+    const place = () => {
+        const rect = bubble.getBoundingClientRect();
+        halo.style.left = `${rect.left}px`;
+        halo.style.top = `${rect.top}px`;
+        halo.style.width = `${rect.width}px`;
+        halo.style.height = `${rect.height}px`;
+        halo.style.borderRadius = radius;
+    };
+
+    // 连点时只保留最后一次：旧的那圈光晕立刻退场，不会和新位置互相拉扯
+    const token = (state.haloToken += 1);
+    place();
+    halo.getAnimations().forEach(animation => animation.cancel());
+    const fade = halo.animate(
+        [{ opacity: 1 }, { opacity: 0 }],
+        { duration: FLASH_MS, easing: 'ease-out' }
+    );
+    // 标签页被冻结时动画不推进，兜底再收一次，光晕不会一直挂着
+    setTimeout(() => fade.cancel(), FLASH_MS + 200);
+
+    // 闪的这段时间跟着滚动走，光晕不会停在原地；动画结束后透明度回到样式表里的 0
+    const follow = () => {
+        if (token !== state.haloToken || fade.playState !== 'running') return;
+        if (!bubble.isConnected) {
+            fade.cancel();
+            return;
+        }
+        place();
+        requestAnimationFrame(follow);
+    };
+    requestAnimationFrame(follow);
 }
 
 // 横线高亮跟随滚动：最后一条越过内容区顶端（悬浮标题之下那条线）的消息就是当前读到的位置
@@ -441,8 +502,9 @@ export function teardownMessageNav() {
     state.watchTimer = null;
     clearInterval(state.historyTimer);
     state.historyTimer = null;
-    state.flashing.forEach(timer => clearTimeout(timer));
-    state.flashing.clear();
+    state.haloToken += 1;
+    state.halo?.remove();
+    state.halo = null;
 
     state.root?.remove();
     state.root = null;

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 网页端工具箱 - LaTeX 公式复制 & 会话文件夹 & 消息导航 & 折叠思考
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.12.1444
+// @version      2026.11.12.1456
 // @author       sherlocknieh
 // @description  增强 DeepSeek 网页端使用体验: 会话文件夹 + 消息导航 + KaTeX 公式复制修正 + 默认折叠思考。
 // @license      MIT
@@ -417,19 +417,16 @@
             --dscf-nav-active: #679efe;
         }
 
-        /* 跳转目标的气泡边缘发光：只画光圈不铺底色，正文颜色不受影响；
-           时长与 message-nav.js 的 FLASH_MS 一致，圆角沿用气泡自己的 */
-        [data-dscf-flash] {
-            animation: dscf-flash 0.6s ease-out;
-        }
-
-        @keyframes dscf-flash {
-            from {
-                box-shadow: 0 0 0 2px rgba(103, 112, 254, 0.7), 0 0 16px 4px rgba(103, 112, 254, 0.45);
-            }
-            to {
-                box-shadow: 0 0 0 2px rgba(103, 112, 254, 0), 0 0 0 0 rgba(103, 112, 254, 0);
-            }
+        /* 跳转目标的气泡边缘发光：只画光圈不铺底色，正文颜色不受影响。
+           气泡外面的包裹层带裁剪，光晕画在气泡上会缺一条边，所以铺一层固定定位的
+           叠层，尺寸与圆角每次按气泡实时对齐；淡出时长由 message-nav.js 的 FLASH_MS 决定 */
+        .dscf-halo {
+            position: fixed;
+            pointer-events: none;
+            z-index: 2147483000;
+            opacity: 0;
+            box-shadow: inset 0 0 0 2px rgba(103, 112, 254, 0.85),
+                0 0 16px 4px rgba(103, 112, 254, 0.45);
         }
 
         /* DeepSeek 原生消息导航由通用导航完全替代：直接隐藏，避免两套胶囊并存 */
@@ -1878,7 +1875,8 @@
 		href: location.href,
 		refreshTimer: null,
 		watchTimer: null,
-		flashing: new Map()
+		halo: null,
+		haloToken: 0
 	};
 	function readText(el) {
 		const clone = (ADAPTER && ADAPTER.content ? ADAPTER.content(el) : el).cloneNode(true);
@@ -1927,7 +1925,7 @@
 		}
 		return best || Array.from(document.querySelectorAll("*")).filter((el) => {
 			const style = getComputedStyle(el);
-			return /(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 200;
+			return /(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 200 && blocks.some((block) => el.contains(block));
 		}).sort((a, b) => b.scrollHeight - a.scrollHeight)[0] || null;
 	}
 	function readEntries() {
@@ -1948,18 +1946,27 @@
 		if (entry.el && entry.el.isConnected) return entry.el;
 		return getMessageBlocks()[Number(entry.key)] || null;
 	}
-	var JUMP_GAP = 12;
+	var JUMP_GAP = 20;
 	function readTopInset(scroller, blocks) {
 		if (!blocks.length) return JUMP_GAP;
 		const inset = blocks[0].getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
 		return (inset > 0 && inset < 200 ? inset : 0) + JUMP_GAP;
 	}
+	function scrollParentOf(el) {
+		for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) {
+			const { overflowY } = getComputedStyle(node);
+			if (/(auto|scroll)/.test(overflowY) && node.scrollHeight > node.clientHeight + 4) return node;
+		}
+		return null;
+	}
 	function jumpTo(entry) {
 		const block = findBlock(entry);
 		if (!block) return;
-		const scroller = state.scroller;
-		if (scroller && scroller.contains(block)) scroller.scrollTop = Math.max(0, block.getBoundingClientRect().top - scroller.getBoundingClientRect().top - scroller.clientTop + scroller.scrollTop - state.topInset);
-		else block.scrollIntoView({ block: "start" });
+		const scroller = state.scroller && state.scroller.contains(block) ? state.scroller : scrollParentOf(block);
+		if (scroller) {
+			const inset = scroller === state.scroller ? state.topInset : readTopInset(scroller, [block]);
+			scroller.scrollTop = Math.max(0, block.getBoundingClientRect().top - scroller.getBoundingClientRect().top - scroller.clientTop + scroller.scrollTop - inset);
+		} else block.scrollIntoView({ block: "start" });
 		flashEntry(block);
 		setActive(entry.key);
 	}
@@ -1969,12 +1976,45 @@
 		for (let node = img.parentElement; node && node !== block; node = node.parentElement) if (parseFloat(getComputedStyle(node).borderTopLeftRadius) > 0) return node;
 		return img.parentElement;
 	}
+	function ensureHalo() {
+		if (state.halo && state.halo.isConnected) return state.halo;
+		const halo = document.createElement("div");
+		halo.className = "dscf-halo";
+		halo.setAttribute("aria-hidden", "true");
+		document.body.appendChild(halo);
+		state.halo = halo;
+		return halo;
+	}
 	function flashEntry(block) {
 		const bubble = (ADAPTER && ADAPTER.bubble ? ADAPTER.bubble(block) : null) || roundedImageBox(block) || block;
-		clearTimeout(state.flashing.get(bubble));
-		bubble.setAttribute("data-dscf-flash", "1");
-		const timer = setTimeout(() => bubble.removeAttribute("data-dscf-flash"), FLASH_MS);
-		state.flashing.set(bubble, timer);
+		const halo = ensureHalo();
+		const radius = getComputedStyle(bubble).borderRadius;
+		const place = () => {
+			const rect = bubble.getBoundingClientRect();
+			halo.style.left = `${rect.left}px`;
+			halo.style.top = `${rect.top}px`;
+			halo.style.width = `${rect.width}px`;
+			halo.style.height = `${rect.height}px`;
+			halo.style.borderRadius = radius;
+		};
+		const token = state.haloToken += 1;
+		place();
+		halo.getAnimations().forEach((animation) => animation.cancel());
+		const fade = halo.animate([{ opacity: 1 }, { opacity: 0 }], {
+			duration: FLASH_MS,
+			easing: "ease-out"
+		});
+		setTimeout(() => fade.cancel(), 800);
+		const follow = () => {
+			if (token !== state.haloToken || fade.playState !== "running") return;
+			if (!bubble.isConnected) {
+				fade.cancel();
+				return;
+			}
+			place();
+			requestAnimationFrame(follow);
+		};
+		requestAnimationFrame(follow);
 	}
 	function updateActive() {
 		if (!state.entries.length || !state.scroller) return;
@@ -2119,8 +2159,9 @@
 		state.watchTimer = null;
 		clearInterval(state.historyTimer);
 		state.historyTimer = null;
-		state.flashing.forEach((timer) => clearTimeout(timer));
-		state.flashing.clear();
+		state.haloToken += 1;
+		state.halo?.remove();
+		state.halo = null;
 		state.root?.remove();
 		state.root = null;
 		state.list = null;
