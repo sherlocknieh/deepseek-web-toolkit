@@ -86,7 +86,7 @@ npm run release --dry-run      # 只预览版本号
 - DeepSeek 前端更新 → `dom.js` + `checkFrontUpdating`
 - 新增交互状态 → `runtime.js` + `runtime.disposers`
 - 发布流程 → `scripts/*` + `.githooks/pre-commit`
-- 消息导航 → `message-nav.js`：非 DeepSeek 站点在 `main.js` 启动；站点差异只写在 `SITE_ADAPTERS`（消息块选择器、角色判定、正文范围、滚动容器），未适配站点走通用标记兜底；胶囊尺寸照抄 DeepSeek 原生导航（34px→240px、条目 30px、横线 8×2），改样式时以真机为准；只列用户提问，跳转直接改滚动容器的 `scrollTop`（站点会把平滑滚动逐帧拉回底部），并按首条消息距滚动原点的距离让出悬浮标题的高度，跳转高亮只画在气泡（`SITE_ADAPTERS.bubble`）上；DeepSeek 用原生导航，`native-nav.js` 改写 `(max-width: 1200px)` 断点避免侧栏展开时被卸载，并在应用不渲染原生导航（单条提问）时启用通用导航兜底，`styles.js` 负责常显与留白
+- 消息导航 → `message-nav.js`：非 DeepSeek 站点在 `main.js` 启动；站点差异只写在 `SITE_ADAPTERS`（消息块选择器、角色判定、正文范围、滚动容器），未适配站点走通用标记兜底；胶囊尺寸照抄 DeepSeek 原生导航（34px→240px、条目 30px、横线 8×2），改样式时以真机为准；只列用户提问，跳转直接改滚动容器的 `scrollTop`（站点会把平滑滚动逐帧拉回底部），并按首条消息距滚动原点的距离让出悬浮标题的高度，跳转高亮只画在气泡（`SITE_ADAPTERS.bubble`）上，无正文时退到图片外面那层带圆角的容器；DeepSeek 用原生导航，`native-nav.js` 改写 `(max-width: 1200px)` 断点避免侧栏展开时被卸载，并在应用不渲染原生导航（单条提问）时启用通用导航兜底，`styles.js` 负责常显与留白
 
 ## 浏览器调试
 

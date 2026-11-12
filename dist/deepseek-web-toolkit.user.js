@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 网页端工具箱 - LaTeX 公式复制 & 会话文件夹 & 消息导航 & 折叠思考
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.12.1348
+// @version      2026.11.12.1357
 // @author       sherlocknieh
 // @description  增强 DeepSeek 网页端使用体验: 会话文件夹 + 消息导航 + KaTeX 公式复制修正 + 默认折叠思考。
 // @license      MIT
@@ -1849,10 +1849,7 @@
 			selector: "[data-virtual-list-item-key]",
 			role: (el) => el.querySelector(".ds-markdown") ? "ASSISTANT" : "USER",
 			content: (el) => el.querySelector(".ds-message") || el,
-			bubble: (el) => {
-				const bubbles = Array.from(el.querySelectorAll(".ds-message > div"));
-				return bubbles.find((node) => (node.innerText || "").trim()) || bubbles[0];
-			},
+			bubble: (el) => Array.from(el.querySelectorAll(".ds-message > div")).find((node) => (node.innerText || "").trim()),
 			scroller: ".ds-scroll-area"
 		}
 	];
@@ -1967,8 +1964,14 @@
 		flashEntry(block);
 		setActive(entry.key);
 	}
+	function roundedImageBox(block) {
+		const img = block.querySelector("img");
+		if (!img) return null;
+		for (let node = img.parentElement; node && node !== block; node = node.parentElement) if (parseFloat(getComputedStyle(node).borderTopLeftRadius) > 0) return node;
+		return img.parentElement;
+	}
 	function flashEntry(block) {
-		const bubble = (ADAPTER && ADAPTER.bubble ? ADAPTER.bubble(block) : null) || block;
+		const bubble = (ADAPTER && ADAPTER.bubble ? ADAPTER.bubble(block) : null) || roundedImageBox(block) || block;
 		clearTimeout(state.flashing.get(bubble));
 		bubble.setAttribute("data-dscf-flash", "1");
 		const timer = setTimeout(() => bubble.removeAttribute("data-dscf-flash"), FLASH_MS);

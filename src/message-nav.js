@@ -55,11 +55,9 @@ const SITE_ADAPTERS = [
         role: el => (el.querySelector('.ds-markdown') ? 'ASSISTANT' : 'USER'),
         content: el => el.querySelector('.ds-message') || el,
         // .ds-message 是满宽的行，气泡是它内部按内容撑开的一层；带附件时图片和文字各占一块，
-        // 高亮要落在文字气泡上而不是图片上
-        bubble: el => {
-            const bubbles = Array.from(el.querySelectorAll('.ds-message > div'));
-            return bubbles.find(node => (node.innerText || '').trim()) || bubbles[0];
-        },
+        // 有正文就落在文字气泡上，纯图片交给圆角图片框兜底
+        bubble: el => Array.from(el.querySelectorAll('.ds-message > div'))
+            .find(node => (node.innerText || '').trim()),
         scroller: '.ds-scroll-area'
     }
 ];
@@ -228,9 +226,19 @@ function jumpTo(entry) {
     setActive(entry.key);
 }
 
+// 无正文时把光晕落到包住图片、自己带圆角的那层容器上，否则方框会盖住图片的圆角
+function roundedImageBox(block) {
+    const img = block.querySelector('img');
+    if (!img) return null;
+    for (let node = img.parentElement; node && node !== block; node = node.parentElement) {
+        if (parseFloat(getComputedStyle(node).borderTopLeftRadius) > 0) return node;
+    }
+    return img.parentElement;
+}
+
 // 跳转后短暂高亮气泡，提示定位到了哪条提问
 function flashEntry(block) {
-    const bubble = (ADAPTER && ADAPTER.bubble ? ADAPTER.bubble(block) : null) || block;
+    const bubble = (ADAPTER && ADAPTER.bubble ? ADAPTER.bubble(block) : null) || roundedImageBox(block) || block;
     clearTimeout(state.flashing.get(bubble));
     bubble.setAttribute('data-dscf-flash', '1');
     const timer = setTimeout(() => bubble.removeAttribute('data-dscf-flash'), FLASH_MS);
