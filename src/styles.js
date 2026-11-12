@@ -161,7 +161,7 @@ export function addCSSClass() {
             box-shadow: inset 0 0 0 1.5px rgba(103, 112, 254, 0.55);
         }
 
-        /* 通用消息导航（其他站点用；DeepSeek 走原生导航）：几何照搬原生导航——
+        /* 通用消息导航（所有站点；DeepSeek 的原生导航已隐藏）：几何照搬原生导航——
            右侧固定 34×300，收起时只露一颗 34×292 的毛玻璃胶囊和一列横线；
            悬停后换成 240 宽、按内容高度垂直居中的实色提问列表 */
         .dscf-msgnav {
@@ -351,16 +351,14 @@ export function addCSSClass() {
             }
         }
 
-        /* 原生消息导航被前端在 768px 以下设成 display:none，宽屏也要悬停才露出。
-           这里不设断点、全程常显：断点两侧的媒体查询区间不重合，缩放跨过 768px
-           时会先消失再出现 */
+        /* DeepSeek 原生消息导航由通用导航完全替代：直接隐藏，避免两套胶囊并存 */
         [style*="--scroll-nav-page-padding"] {
-            display: flex !important;
+            display: none !important;
         }
 
-        /* 窄屏给消息列表补右内边距，避开导航。应用在 768px 处把列表外边距从 44px
-           收到 20px，这里把下限同步从 14px 提到 38px，右侧总留白全程都是 58px，
-           缩放跨断点不再突然变宽 */
+        /* 窄屏给消息列表补右内边距，避开右上常显的通用导航。应用在 768px 处把列表
+           外边距从 44px 收到 20px，这里把下限同步从 14px 提到 38px，右侧总留白
+           全程都是 58px，缩放跨断点不再突然变宽 */
         .ds-virtual-list--printable .ds-virtual-list-items {
             padding-right: max(calc((100% - var(--message-list-max-width)) / 2), 14px) !important;
         }

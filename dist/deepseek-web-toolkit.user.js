@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 网页端工具箱 - LaTeX 公式复制 & 会话文件夹 & 消息导航 & 折叠思考
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.12.1437
+// @version      2026.11.12.1444
 // @author       sherlocknieh
 // @description  增强 DeepSeek 网页端使用体验: 会话文件夹 + 消息导航 + KaTeX 公式复制修正 + 默认折叠思考。
 // @license      MIT
@@ -242,7 +242,7 @@
             box-shadow: inset 0 0 0 1.5px rgba(103, 112, 254, 0.55);
         }
 
-        /* 通用消息导航（其他站点用；DeepSeek 走原生导航）：几何照搬原生导航——
+        /* 通用消息导航（所有站点；DeepSeek 的原生导航已隐藏）：几何照搬原生导航——
            右侧固定 34×300，收起时只露一颗 34×292 的毛玻璃胶囊和一列横线；
            悬停后换成 240 宽、按内容高度垂直居中的实色提问列表 */
         .dscf-msgnav {
@@ -432,16 +432,14 @@
             }
         }
 
-        /* 原生消息导航被前端在 768px 以下设成 display:none，宽屏也要悬停才露出。
-           这里不设断点、全程常显：断点两侧的媒体查询区间不重合，缩放跨过 768px
-           时会先消失再出现 */
+        /* DeepSeek 原生消息导航由通用导航完全替代：直接隐藏，避免两套胶囊并存 */
         [style*="--scroll-nav-page-padding"] {
-            display: flex !important;
+            display: none !important;
         }
 
-        /* 窄屏给消息列表补右内边距，避开导航。应用在 768px 处把列表外边距从 44px
-           收到 20px，这里把下限同步从 14px 提到 38px，右侧总留白全程都是 58px，
-           缩放跨断点不再突然变宽 */
+        /* 窄屏给消息列表补右内边距，避开右上常显的通用导航。应用在 768px 处把列表
+           外边距从 44px 收到 20px，这里把下限同步从 14px 提到 38px，右侧总留白
+           全程都是 58px，缩放跨断点不再突然变宽 */
         .ds-virtual-list--printable .ds-virtual-list-items {
             padding-right: max(calc((100% - var(--message-list-max-width)) / 2), 14px) !important;
         }
@@ -2133,63 +2131,6 @@
 		state.topInset = 0;
 		if (runtime.refreshMessageNav === refreshMessageNav) runtime.refreshMessageNav = null;
 	}
-	var NARROW_QUERY = "(max-width: 1200px)";
-	var PATCH_FLAG = "__dscf_native_nav_patched__";
-	var NATIVE_NAV_SELECTOR = "[style*=\"--scroll-nav-page-padding\"]";
-	function normalize(query) {
-		return String(query).replace(/\s+/g, "").toLowerCase();
-	}
-	function createNeverMatch(query) {
-		return {
-			matches: false,
-			media: query,
-			onchange: null,
-			addListener() {},
-			removeListener() {},
-			addEventListener() {},
-			removeEventListener() {},
-			dispatchEvent() {
-				return false;
-			}
-		};
-	}
-	function patchNativeNavBreakpoint() {
-		const pageWindow = typeof unsafeWindow !== "undefined" && unsafeWindow ? unsafeWindow : window;
-		if (pageWindow[PATCH_FLAG]) return;
-		const original = pageWindow.matchMedia.bind(pageWindow);
-		const target = normalize(NARROW_QUERY);
-		pageWindow.matchMedia = function(query) {
-			if (normalize(query) === target) return createNeverMatch(query);
-			return original(query);
-		};
-		pageWindow[PATCH_FLAG] = true;
-	}
-	function watchNativeNavFallback() {
-		let driving = null;
-		let timer = null;
-		const sync = () => {
-			timer = null;
-			const needFallback = !document.querySelector(NATIVE_NAV_SELECTOR);
-			if (needFallback === driving) return;
-			if (needFallback) initMessageNav();
-			else teardownMessageNav();
-			driving = needFallback;
-		};
-		const schedule = () => {
-			if (!timer) timer = setTimeout(sync, 200);
-		};
-		sync();
-		const observer = new MutationObserver(schedule);
-		observer.observe(document.body, {
-			childList: true,
-			subtree: true
-		});
-		runtime.disposers.push(() => {
-			observer.disconnect();
-			clearTimeout(timer);
-			teardownMessageNav();
-		});
-	}
 	var THINK_SELECTOR = ".ds-think-content";
 	var HEADER_ATTR = "data-dscf-think";
 	var ITEM_KEY_ATTR = "data-virtual-list-item-key";
@@ -2298,7 +2239,6 @@
 	}
 	if (runtime.initialized) runtime.dispose();
 	runtime.initialized = true;
-	patchNativeNavBreakpoint();
 	runtime.disposers.push(clearDropHighlight, restoreDisplayTitles, disposeRenameEditor, cleanupInPlace, removeNewFolderButton, disposeNewFolderEditor, disposeFolderRename, disposeThinkCollapse);
 	runtime.refreshSelection = updateSelectedState;
 	runtime.rebuild = rebuild;
@@ -2313,17 +2253,16 @@
 	var isDeepSeek = location.hostname === "chat.deepseek.com";
 	function main() {
 		addCSSClass();
+		initMessageNav();
+		runtime.disposers.push(teardownMessageNav);
 		if (!isDeepSeek) {
 			console.log("[DeepSeek 工具箱] 脚本已加载（消息导航）");
-			initMessageNav();
-			runtime.disposers.push(teardownMessageNav);
 			return;
 		}
 		addIconFont();
 		initKatexCopy();
 		console.log("[DeepSeek 工具箱] 脚本已加载，等待会话列表…");
 		initThinkCollapse();
-		watchNativeNavFallback();
 		waitFor(() => getOriginalAnchors().length > 0, () => {
 			if (checkFrontUpdating()) {
 				console.warn("Deepseek 前端已更新，会话目录暂不生效（公式复制不受影响）。");

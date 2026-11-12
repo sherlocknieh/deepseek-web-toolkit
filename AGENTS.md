@@ -1,6 +1,6 @@
 # DeepSeek 工具箱 — Agent Index
 
-DeepSeek 油猴脚本，一个产物包含四块互不依赖的功能：会话目录（置顶区里名称带 `/` 的会话原地折叠成目录）、KaTeX 复制修正（注入官方 copy-tex）、消息导航（DeepSeek 用原生导航，它缺席时由通用导航兜底；其他站点用通用实现）、默认折叠思考。Vite + vite-plugin-monkey，源码在 `src/`，产物在 `dist/deepseek-web-toolkit.user.js`。
+DeepSeek 油猴脚本，一个产物包含四块互不依赖的功能：会话目录（置顶区里名称带 `/` 的会话原地折叠成目录）、KaTeX 复制修正（注入官方 copy-tex）、消息导航（所有站点都用通用实现，DeepSeek 的原生导航被隐藏）、默认折叠思考。Vite + vite-plugin-monkey，源码在 `src/`，产物在 `dist/deepseek-web-toolkit.user.js`。
 
 ## 快速命令
 
@@ -22,8 +22,7 @@ npm run release --dry-run      # 只预览版本号
 | --- | --- |
 | `main.js` | 入口、启动顺序、热更新清理登记 |
 | `katex-copy.js` | 注入 KaTeX copy-tex，与目录功能无依赖 |
-| `native-nav.js` | 改写原生导航的 `(max-width: 1200px)` 断点，避免侧栏展开时导航被卸载 |
-| `message-nav.js` | 通用消息导航：复刻 DeepSeek 胶囊（横线 + 悬停展开提问列表），按站点适配选择器；DeepSeek 不启用 |
+| `message-nav.js` | 通用消息导航：复刻 DeepSeek 胶囊（横线 + 悬停展开提问列表），按站点适配选择器；所有站点都用它 |
 | `think-collapse.js` | 默认折叠已完成的思考块，只点应用自己的标题栏 |
 | `runtime.js` | 运行时状态、上一实例回收、页面 window |
 | `constants.js` | 键名、缩进、布局 data 属性名 |
@@ -59,9 +58,9 @@ npm run release --dry-run      # 只预览版本号
 
 ## 启动与热更新
 
-`main.js` → `addCSSClass` →（仅 DeepSeek）`addIconFont` / `initKatexCopy` / `initThinkCollapse` → `waitFor` 侧栏会话 → `checkFrontUpdating` → `rebuild(true)` → `observeChatList` / `initDragAndDrop` / `listenDomain`。
+`main.js` → `addCSSClass` → `initMessageNav` →（仅 DeepSeek）`addIconFont` / `initKatexCopy` / `initThinkCollapse` → `waitFor` 侧栏会话 → `checkFrontUpdating` → `rebuild(true)` → `observeChatList` / `initDragAndDrop` / `listenDomain`。
 
-非 DeepSeek 站点只注入内联样式并启动消息导航：图标字体在 cdnjs、copy-tex 在 jsdelivr，会被 ChatGPT / Gemini 的 CSP 拦下，Gemini 还会因 Trusted Types 在设置 `script.src` 时抛错，所以这两项必须留在 DeepSeek 分支。
+非 DeepSeek 站点注入内联样式并启动消息导航后就结束：图标字体在 cdnjs、copy-tex 在 jsdelivr，会被 ChatGPT / Gemini 的 CSP 拦下，Gemini 还会因 Trusted Types 在设置 `script.src` 时抛错，所以这两项必须留在 DeepSeek 分支。
 
 `runtime.js` 在模块加载时回收上一轮实例；HMR 可能只重跑 `main.js`，入口再用 `runtime.initialized` 判断并 `runtime.dispose()`，清理函数登记在 `runtime.disposers`。
 
@@ -81,12 +80,12 @@ npm run release --dry-run      # 只预览版本号
 - 显示标题 → `titles.js`
 - 拖动/放置 → `drag.js`；置顶 `pin.js`；改名 `api.js`
 - 展开持久化 → `storage.js` + `constants.js`
-- 通用消息导航 → `message-nav.js`；原生导航显隐 → `native-nav.js` + `styles.js`
+- 通用消息导航 → `message-nav.js`；原生导航隐藏与消息区留白 → `styles.js`
 - 思考折叠 → `think-collapse.js`
 - DeepSeek 前端更新 → `dom.js` + `checkFrontUpdating`
 - 新增交互状态 → `runtime.js` + `runtime.disposers`
 - 发布流程 → `scripts/*` + `.githooks/pre-commit`
-- 消息导航 → `message-nav.js`：非 DeepSeek 站点在 `main.js` 启动；站点差异只写在 `SITE_ADAPTERS`（消息块选择器、角色判定、正文范围、滚动容器），未适配站点走通用标记兜底；胶囊尺寸照抄 DeepSeek 原生导航（34px→240px、条目 30px、横线 8×2），改样式时以真机为准；只列用户提问，跳转直接改滚动容器的 `scrollTop`（站点会把平滑滚动逐帧拉回底部），并按首条消息距滚动原点的距离让出悬浮标题的高度，跳转高亮只画在气泡（`SITE_ADAPTERS.bubble`）上，无正文时退到图片外面那层带圆角的容器；DeepSeek 用原生导航，`native-nav.js` 改写 `(max-width: 1200px)` 断点避免侧栏展开时被卸载，并在应用不渲染原生导航（单条提问）时启用通用导航兜底，`styles.js` 负责常显与留白
+- 消息导航 → `message-nav.js`：所有站点在 `main.js` 启动；站点差异只写在 `SITE_ADAPTERS`（消息块选择器、角色判定、正文范围、滚动容器），未适配站点走通用标记兜底；胶囊尺寸照抄 DeepSeek 原生导航（34px→240px、条目 30px、横线 8×2），改样式时以真机为准；只列用户提问，跳转直接改滚动容器的 `scrollTop`（站点会把平滑滚动逐帧拉回底部），并按首条消息距滚动原点的距离让出悬浮标题的高度，跳转高亮只画在气泡（`SITE_ADAPTERS.bubble`）上，无正文时退到图片外面那层带圆角的容器；DeepSeek 的原生导航由 `styles.js` 隐藏、由通用导航完全接替，同一份样式还负责消息区右留白
 
 ## 浏览器调试
 
@@ -114,4 +113,4 @@ cp -a "$SRC/Default/Local Storage" "$DST/Default/Local Storage"
 - 构建：`npm run build`；发布：`npm run release "feat: …"`（钩子走同一套升版本+构建，发布脚本用 `--no-verify` 跳过）。
 - 真机：控制台出现 `[DeepSeek 工具箱] 脚本已加载` 和 `已初始化，会话数 N`；确认只有置顶区成目录、叶子只显示末段、未置顶斜杠会话平铺、拖动/置顶/改名可用、新建与删除空目录正常。
 - 确认打开会话时已完成的思考块默认收起、思考输出中保持展开、手动展开后不再被收起。
-- 确认右侧原生消息导航全程常显且不压正文，缩放跨过 768px 时导航不闪、右边距不跳变；其他站点出现右侧胶囊（窄屏也常显），收起是一列横线，悬停展开提问列表（移开即收回），点击跳到对应提问且不被悬浮标题压住，当前项横线加粗变蓝。
+- 确认 DeepSeek 原生导航不再出现，右侧只有脚本的胶囊（单条提问也常显、窄屏常显）且不压正文，缩放跨过 768px 时导航不闪、右边距不跳变；收起是一列横线，悬停展开提问列表（移开即收回），点击跳到对应提问且不被悬浮标题压住，当前项横线加粗变蓝。

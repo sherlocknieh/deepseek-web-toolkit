@@ -10,7 +10,6 @@ import { disposeRenameEditor } from './editor.js';
 import { cleanupInPlace, removeNewFolderButton, disposeNewFolderEditor, disposeFolderRename } from './render.js';
 import { initKatexCopy } from './katex-copy.js';
 import { initMessageNav, teardownMessageNav } from './message-nav.js';
-import { patchNativeNavBreakpoint, watchNativeNavFallback } from './native-nav.js';
 import { initThinkCollapse, disposeThinkCollapse } from './think-collapse.js';
 
 // 开发热更新可能只重跑入口而不重跑 runtime.js；先回收当前实例再登记本轮清理
@@ -18,9 +17,6 @@ if (runtime.initialized) {
     runtime.dispose();
 }
 runtime.initialized = true;
-
-// 必须在应用读取断点前改写，否则导航已被卸载
-patchNativeNavBreakpoint();
 
 runtime.disposers.push(
     clearDropHighlight,
@@ -48,12 +44,14 @@ const isDeepSeek = location.hostname === 'chat.deepseek.com';
 function main() {
     addCSSClass();
 
-    // 会话目录依赖 DeepSeek 侧栏结构，其他站点只启用消息导航；
+    // 所有站点都用通用消息导航，DeepSeek 的原生导航已由样式隐藏
+    initMessageNav();
+    runtime.disposers.push(teardownMessageNav);
+
+    // 会话目录依赖 DeepSeek 侧栏结构，其他站点到这里就结束；
     // 图标字体和公式复制补丁都是 DeepSeek 专属，其他站点注入会被 CSP 拦下并中断初始化
     if (!isDeepSeek) {
         console.log('[DeepSeek 工具箱] 脚本已加载（消息导航）');
-        initMessageNav();
-        runtime.disposers.push(teardownMessageNav);
         return;
     }
 
@@ -64,9 +62,6 @@ function main() {
 
     // 思考折叠只依赖消息区结构，不等侧栏，开局就接管
     initThinkCollapse();
-
-    // 应用在单条提问时不渲染原生导航，这里在它缺席时用通用导航补上
-    watchNativeNavFallback();
 
     waitFor(() => getOriginalAnchors().length > 0, () => {
         if (checkFrontUpdating()) {

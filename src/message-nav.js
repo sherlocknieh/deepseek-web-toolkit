@@ -1,7 +1,8 @@
 import { runtime } from './runtime.js';
 
 // 通用消息导航：复刻 DeepSeek 原生导航——右侧一颗胶囊收成一列横线，悬停展开提问列表，
-// 点击跳到对应提问。DeepSeek 自带原生导航，这里只在其他站点启用；实现只依赖 DOM，不碰站点内部实例。
+// 点击跳到对应提问。所有站点（含 DeepSeek）都用这一套，DeepSeek 的原生导航由样式隐藏；
+// 实现只依赖 DOM，不碰站点内部实例。
 //
 // 识别规则：
 //   消息块 —— 按站点各自的结构取；没有适配的站点才退回通用语义标记
@@ -52,8 +53,7 @@ const SITE_ADAPTERS = [
     },
     {
         hosts: ['chat.deepseek.com'],
-        // 每条消息是一个虚拟列表项；回答里有 .ds-markdown（思考区也在里面），提问只有纯文本气泡。
-        // 只在应用没渲染原生导航时启用（见 native-nav.js）
+        // 每条消息是一个虚拟列表项；回答里有 .ds-markdown（思考区也在里面），提问只有纯文本气泡
         selector: '[data-virtual-list-item-key]',
         role: el => (el.querySelector('.ds-markdown') ? 'ASSISTANT' : 'USER'),
         content: el => el.querySelector('.ds-message') || el,
@@ -415,8 +415,7 @@ function scheduleWatch() {
     }, 800);
 }
 
-// 通用导航的启动：DeepSeek 也会调用它（原生导航缺席时兜底），所以这里可重复调用；
-// 清理由调用方登记到 runtime.disposers
+// 通用导航的启动：可重复调用，清理由调用方登记到 runtime.disposers
 export function initMessageNav() {
     if (state.root) return;
     ensureDom();
