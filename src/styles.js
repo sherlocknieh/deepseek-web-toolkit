@@ -340,9 +340,8 @@ export function addCSSClass() {
             --dscf-nav-active: #679efe;
         }
 
-        /* 跳转目标短暂高亮 */
+        /* 跳转目标的气泡短暂高亮；圆角沿用气泡自己的，不在这里改形状 */
         [data-dscf-flash] {
-            border-radius: 8px;
             animation: dscf-flash 1.6s ease-out;
         }
 

@@ -25,6 +25,8 @@ const SITE_ADAPTERS = [
             if (author) return author === 'user' ? 'USER' : 'ASSISTANT';
             return /:user$/.test(el.getAttribute('data-chatgpt-search-unit-key') || '') ? 'USER' : 'ASSISTANT';
         },
+        // 高亮只画在气泡上：整轮容器是满宽的，画上去会横穿正文
+        bubble: el => el.querySelector('.bg-user-message') || el.querySelector('[data-message-author-role="user"]'),
         scroller: 'main'
     },
     {
@@ -33,6 +35,7 @@ const SITE_ADAPTERS = [
         role: el => (el.tagName.toLowerCase() === 'user-query' ? 'USER' : 'ASSISTANT'),
         // 正文只在气泡内；「你说」这类读屏副本由 readText 统一剔除
         content: el => el.querySelector('div.query-content') || el.querySelector('message-content') || el,
+        bubble: el => el.querySelector('div.query-content'),
         scroller: 'infinite-scroller, #chat-history'
     },
     {
@@ -41,7 +44,19 @@ const SITE_ADAPTERS = [
         selector: "div[id^='response-']",
         role: el => (el.querySelector('[data-testid="user-message"]') ? 'USER' : 'ASSISTANT'),
         content: el => el.querySelector('.response-content-markdown') || el.querySelector('[data-bubble-text]') || el,
+        bubble: el => el.querySelector('[data-testid="user-message"]'),
         scroller: 'main'
+    },
+    {
+        hosts: ['chat.deepseek.com'],
+        // 每条消息是一个虚拟列表项；回答里有 .ds-markdown（思考区也在里面），提问只有纯文本气泡。
+        // 只在应用没渲染原生导航时启用（见 native-nav.js）
+        selector: '[data-virtual-list-item-key]',
+        role: el => (el.querySelector('.ds-markdown') ? 'ASSISTANT' : 'USER'),
+        content: el => el.querySelector('.ds-message') || el,
+        // .ds-message 是满宽的行，气泡是它内部按内容撑开的一层
+        bubble: el => el.querySelector('.ds-message > div'),
+        scroller: '.ds-scroll-area'
     }
 ];
 
@@ -209,12 +224,13 @@ function jumpTo(entry) {
     setActive(entry.key);
 }
 
-// 跳转后短暂高亮，提示定位到了哪条消息
+// 跳转后短暂高亮气泡，提示定位到了哪条提问
 function flashEntry(block) {
-    clearTimeout(state.flashing.get(block));
-    block.setAttribute('data-dscf-flash', '1');
-    const timer = setTimeout(() => block.removeAttribute('data-dscf-flash'), FLASH_MS);
-    state.flashing.set(block, timer);
+    const bubble = (ADAPTER && ADAPTER.bubble ? ADAPTER.bubble(block) : null) || block;
+    clearTimeout(state.flashing.get(bubble));
+    bubble.setAttribute('data-dscf-flash', '1');
+    const timer = setTimeout(() => bubble.removeAttribute('data-dscf-flash'), FLASH_MS);
+    state.flashing.set(bubble, timer);
 }
 
 // 横线高亮跟随滚动：最后一条越过内容区顶端（悬浮标题之下那条线）的消息就是当前读到的位置
@@ -346,6 +362,8 @@ export function refreshMessageNav() {
 
     const scroller = resolveScroller(entries.map(entry => entry.el));
     if (!scroller) {
+        // 页面还没排好版时可能暂时找不到滚动容器，隔一会儿再认一次
+        scheduleWatch();
         syncVisibility();
         return;
     }
@@ -379,8 +397,10 @@ function scheduleWatch() {
     }, 800);
 }
 
-// 其他站点不加载会话目录，这里自己盯地址栏：SPA 切换会话后重新识别
+// 通用导航的启动：DeepSeek 也会调用它（原生导航缺席时兜底），所以这里可重复调用；
+// 清理由调用方登记到 runtime.disposers
 export function initMessageNav() {
+    if (state.root) return;
     ensureDom();
 
     state.historyTimer = setInterval(() => {
@@ -390,7 +410,6 @@ export function initMessageNav() {
     }, 700);
 
     runtime.refreshMessageNav = refreshMessageNav;
-    runtime.disposers.push(teardownMessageNav);
 
     refreshMessageNav();
     if (readEntries().length < MIN_ENTRIES) scheduleWatch();

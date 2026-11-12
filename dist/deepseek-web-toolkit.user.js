@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 网页端工具箱 - LaTeX 公式复制 & 会话文件夹 & 消息导航 & 折叠思考
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.12.1322
+// @version      2026.11.12.1333
 // @author       sherlocknieh
 // @description  增强 DeepSeek 网页端使用体验: 会话文件夹 + 消息导航 + KaTeX 公式复制修正 + 默认折叠思考。
 // @license      MIT
@@ -421,9 +421,8 @@
             --dscf-nav-active: #679efe;
         }
 
-        /* 跳转目标短暂高亮 */
+        /* 跳转目标的气泡短暂高亮；圆角沿用气泡自己的，不在这里改形状 */
         [data-dscf-flash] {
-            border-radius: 8px;
             animation: dscf-flash 1.6s ease-out;
         }
 
@@ -1825,6 +1824,7 @@
 				if (author) return author === "user" ? "USER" : "ASSISTANT";
 				return /:user$/.test(el.getAttribute("data-chatgpt-search-unit-key") || "") ? "USER" : "ASSISTANT";
 			},
+			bubble: (el) => el.querySelector(".bg-user-message") || el.querySelector("[data-message-author-role=\"user\"]"),
 			scroller: "main"
 		},
 		{
@@ -1832,6 +1832,7 @@
 			selector: "user-query, model-response",
 			role: (el) => el.tagName.toLowerCase() === "user-query" ? "USER" : "ASSISTANT",
 			content: (el) => el.querySelector("div.query-content") || el.querySelector("message-content") || el,
+			bubble: (el) => el.querySelector("div.query-content"),
 			scroller: "infinite-scroller, #chat-history"
 		},
 		{
@@ -1839,7 +1840,16 @@
 			selector: "div[id^='response-']",
 			role: (el) => el.querySelector("[data-testid=\"user-message\"]") ? "USER" : "ASSISTANT",
 			content: (el) => el.querySelector(".response-content-markdown") || el.querySelector("[data-bubble-text]") || el,
+			bubble: (el) => el.querySelector("[data-testid=\"user-message\"]"),
 			scroller: "main"
+		},
+		{
+			hosts: ["chat.deepseek.com"],
+			selector: "[data-virtual-list-item-key]",
+			role: (el) => el.querySelector(".ds-markdown") ? "ASSISTANT" : "USER",
+			content: (el) => el.querySelector(".ds-message") || el,
+			bubble: (el) => el.querySelector(".ds-message > div"),
+			scroller: ".ds-scroll-area"
 		}
 	];
 	var FALLBACK_SELECTOR = [
@@ -1954,10 +1964,11 @@
 		setActive(entry.key);
 	}
 	function flashEntry(block) {
-		clearTimeout(state.flashing.get(block));
-		block.setAttribute("data-dscf-flash", "1");
-		const timer = setTimeout(() => block.removeAttribute("data-dscf-flash"), FLASH_MS);
-		state.flashing.set(block, timer);
+		const bubble = (ADAPTER && ADAPTER.bubble ? ADAPTER.bubble(block) : null) || block;
+		clearTimeout(state.flashing.get(bubble));
+		bubble.setAttribute("data-dscf-flash", "1");
+		const timer = setTimeout(() => bubble.removeAttribute("data-dscf-flash"), FLASH_MS);
+		state.flashing.set(bubble, timer);
 	}
 	function updateActive() {
 		if (!state.entries.length || !state.scroller) return;
@@ -2055,6 +2066,7 @@
 		}
 		const scroller = resolveScroller(entries.map((entry) => entry.el));
 		if (!scroller) {
+			scheduleWatch();
 			syncVisibility();
 			return;
 		}
@@ -2082,6 +2094,7 @@
 		}, 800);
 	}
 	function initMessageNav() {
+		if (state.root) return;
 		ensureDom();
 		state.historyTimer = setInterval(() => {
 			if (location.href === state.href) return;
@@ -2089,7 +2102,6 @@
 			scheduleRefresh();
 		}, 700);
 		runtime.refreshMessageNav = refreshMessageNav;
-		runtime.disposers.push(teardownMessageNav);
 		refreshMessageNav();
 		if (readEntries().length < MIN_ENTRIES) scheduleWatch();
 	}
@@ -2115,6 +2127,7 @@
 	}
 	var NARROW_QUERY = "(max-width: 1200px)";
 	var PATCH_FLAG = "__dscf_native_nav_patched__";
+	var NATIVE_NAV_SELECTOR = "[style*=\"--scroll-nav-page-padding\"]";
 	function normalize(query) {
 		return String(query).replace(/\s+/g, "").toLowerCase();
 	}
@@ -2142,6 +2155,32 @@
 			return original(query);
 		};
 		pageWindow[PATCH_FLAG] = true;
+	}
+	function watchNativeNavFallback() {
+		let driving = null;
+		let timer = null;
+		const sync = () => {
+			timer = null;
+			const needFallback = !document.querySelector(NATIVE_NAV_SELECTOR);
+			if (needFallback === driving) return;
+			if (needFallback) initMessageNav();
+			else teardownMessageNav();
+			driving = needFallback;
+		};
+		const schedule = () => {
+			if (!timer) timer = setTimeout(sync, 200);
+		};
+		sync();
+		const observer = new MutationObserver(schedule);
+		observer.observe(document.body, {
+			childList: true,
+			subtree: true
+		});
+		runtime.disposers.push(() => {
+			observer.disconnect();
+			clearTimeout(timer);
+			teardownMessageNav();
+		});
 	}
 	var THINK_SELECTOR = ".ds-think-content";
 	var HEADER_ATTR = "data-dscf-think";
@@ -2269,12 +2308,14 @@
 		if (!isDeepSeek) {
 			console.log("[DeepSeek 工具箱] 脚本已加载（消息导航）");
 			initMessageNav();
+			runtime.disposers.push(teardownMessageNav);
 			return;
 		}
 		addIconFont();
 		initKatexCopy();
 		console.log("[DeepSeek 工具箱] 脚本已加载，等待会话列表…");
 		initThinkCollapse();
+		watchNativeNavFallback();
 		waitFor(() => getOriginalAnchors().length > 0, () => {
 			if (checkFrontUpdating()) {
 				console.warn("Deepseek 前端已更新，会话目录暂不生效（公式复制不受影响）。");
