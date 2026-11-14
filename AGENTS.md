@@ -40,6 +40,7 @@ npm run release --dry-run      # 只预览版本号
 | `folder.js` | 整目录子树改名与占位迁移（拖动与重命名共用） |
 | `styles.js` | 注入目录/拖动/导航样式；图标字体单独按需加载 |
 | `utils.js` | 启动等待 |
+| `.dev/` | 开发构建相关代码：`bump-and-build.mjs` / `release.mjs` / `githooks/pre-commit` / 真机调试 `browser-debug.mjs`（`build/` 为调试产物，已忽略） |
 
 ## 关键不变量
 
