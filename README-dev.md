@@ -44,7 +44,7 @@ npm run dev
 
 版本号在 `vite.config.js` 的 `userscript.version`，由脚本按本地时间生成 `YYYY.MM.DD.HHmm`，**不要手改，也不要手改 `dist`**。
 
-- 提交前钩子 `.githooks/pre-commit` → `scripts/bump-and-build.mjs`：升版本 → 构建 → 核对产物 `@version`，失败还原配置并中断提交
+- 提交前钩子 `.githooks/pre-commit` → `.dev/bump-and-build.mjs`：升版本 → 构建 → 核对产物 `@version`，失败还原配置并中断提交
 - `npm run release "feat: …"`：升版本 → 构建 → commit → tag；`--push` 推送，`--dry-run` 只预览版本号
 - `npm run build`：只构建，不改版本号
 
@@ -56,4 +56,4 @@ npm run dev
 
 - `src/*.js`：按职责拆分，模块图与改动路径见 [AGENTS.md](./AGENTS.md)
 - `vite.config.js`：userscript 元数据与构建输出
-- `scripts/bump-and-build.mjs` / `scripts/release.mjs` / `.githooks/pre-commit`：版本号与发布
+- `.dev/bump-and-build.mjs` / `.dev/release.mjs` / `.githooks/pre-commit`：版本号与发布

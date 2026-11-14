@@ -173,7 +173,7 @@ function devBundle() {
 
 // 开发：npm run dev 后把终端里的 dev 版 userscript 装进油猴，改代码自动热更新
 // 构建：npm run build 直接覆盖 dist 下的发布文件，保持 README 安装链接不变
-// 版本号：由 scripts/bump-and-build.mjs 按日期时间写入，不要手改
+// 版本号：由 .dev/bump-and-build.mjs 按日期时间写入，不要手改
 export default defineConfig({
   plugins: [
     devCspNonce(),
@@ -183,7 +183,7 @@ export default defineConfig({
       userscript: {
         name: 'DeepSeek 网页端工具箱 - LaTeX 公式复制 & 会话文件夹 & 消息导航 & 折叠思考',
         namespace: 'http://tampermonkey.net/',
-        version: '2026.11.12.1456',
+        version: '2026.11.14.1624',
         description: '增强 DeepSeek 网页端使用体验: 会话文件夹 + 消息导航 + KaTeX 公式复制修正 + 默认折叠思考。',
         author: 'sherlocknieh',
         match: [

@@ -12,7 +12,7 @@ npm run release "feat: xxx"    # 升版本 → 构建 → commit → tag（--pus
 npm run release --dry-run      # 只预览版本号
 ```
 
-版本号由 `scripts/bump-and-build.mjs` 按本地时间写入 `vite.config.js`，格式 `YYYY.MM.DD.HHmm`，不要手改，也不要手改 `dist`。
+版本号由 `.dev/bump-and-build.mjs` 按本地时间写入 `vite.config.js`，格式 `YYYY.MM.DD.HHmm`，不要手改，也不要手改 `dist`。
 
 ## 模块
 
@@ -84,7 +84,7 @@ npm run release --dry-run      # 只预览版本号
 - 思考折叠 → `think-collapse.js`
 - DeepSeek 前端更新 → `dom.js` + `checkFrontUpdating`
 - 新增交互状态 → `runtime.js` + `runtime.disposers`
-- 发布流程 → `scripts/*` + `.githooks/pre-commit`
+- 发布流程 → `.dev/*` + `.githooks/pre-commit`
 - 消息导航 → `message-nav.js`：所有站点在 `main.js` 启动；站点差异只写在 `SITE_ADAPTERS`（消息块选择器、角色判定、正文范围、滚动容器），未适配站点走通用标记兜底；胶囊尺寸照抄 DeepSeek 原生导航（34px→240px、条目 30px、横线 8×2），改样式时以真机为准；只列用户提问，跳转直接改滚动容器的 `scrollTop`（站点会把平滑滚动逐帧拉回底部），并按首条消息距滚动原点的距离让出悬浮标题的高度，跳转高亮按气泡（`SITE_ADAPTERS.bubble`）的矩形画在固定叠层 `.dscf-halo` 上（气泡外面的包裹层会裁掉外发光，画在气泡自身会缺一条边），无正文时退到图片外面那层带圆角的容器；DeepSeek 的原生导航由 `styles.js` 隐藏、由通用导航完全接替，同一份样式还负责消息区右留白
 
 ## 浏览器调试

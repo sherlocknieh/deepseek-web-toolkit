@@ -6,7 +6,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "release": "node scripts/release.mjs",
+    "release": "node .dev/release.mjs",
     "hooks": "git config core.hooksPath .githooks"
   },
   "devDependencies": {
