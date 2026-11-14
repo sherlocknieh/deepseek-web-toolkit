@@ -4,12 +4,12 @@
 // 端口默认 9337，可用环境变量 CDP_PORT 覆盖。
 //
 // 用法：
-//   node tools/browser-debug.mjs eval <file.js>       在页面里执行文件内容并输出返回值
-//   node tools/browser-debug.mjs shot <out.png>       截当前页面
-//   node tools/browser-debug.mjs key Enter|Escape     发送按键，等 2.5s 后输出网络日志
-//   node tools/browser-debug.mjs type <text>          在聚焦的输入框里输入文本
-//   node tools/browser-debug.mjs net [ms]             刷新页面并等待，抓 /api/v0/ 请求与响应
-//   node tools/browser-debug.mjs close                关闭浏览器
+//   node .dev/browser-debug.mjs eval <file.js>       在页面里执行文件内容并输出返回值
+//   node .dev/browser-debug.mjs shot <out.png>       截当前页面
+//   node .dev/browser-debug.mjs key Enter|Escape     发送按键，等 2.5s 后输出网络日志
+//   node .dev/browser-debug.mjs type <text>          在聚焦的输入框里输入文本
+//   node .dev/browser-debug.mjs net [ms]             刷新页面并等待，抓 /api/v0/ 请求与响应
+//   node .dev/browser-debug.mjs close                关闭浏览器
 //
 // 注意：页面里的脚本日志和网络日志在命令结束后统一打印，带 CONSOLE 前缀。
 const PORT = process.env.CDP_PORT || 9337;

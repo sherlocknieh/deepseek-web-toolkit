@@ -104,7 +104,7 @@ cp -a "$SRC/Default/Local Storage" "$DST/Default/Local Storage"
 ```
 
 2. 启动 Chrome：`--user-data-dir=$DST --profile-directory=Default --remote-debugging-port=9337 --remote-allow-origins='*'`，打开 `https://chat.deepseek.com/`。
-3. 用 `tools/browser-debug.mjs` eval `dist/deepseek-web-toolkit.user.js`，再 `eval` / `shot` / `key` / `type` / `net` 验证。
+3. 用 `.dev/browser-debug.mjs` eval `dist/deepseek-web-toolkit.user.js`，再 `eval` / `shot` / `key` / `type` / `net` 验证。
 4. 用 `localStorage.userToken` 调 `GET /api/v0/chat_session/fetch_page?count=50` 核对服务端标题。
 5. 收尾：改回测试标题，`close` 浏览器，`rm -rf $DST`。
 
