@@ -181,10 +181,10 @@ export default defineConfig({
     monkey({
       entry: 'src/main.js',
       userscript: {
-        name: 'DeepSeek 网页端工具箱 - LaTeX 公式复制 & 会话文件夹 & 消息导航 & 折叠思考',
+        name: 'DeepSeek 修复+优化',
         namespace: 'http://tampermonkey.net/',
-        version: '2026.11.14.1629',
-        description: '增强 DeepSeek 网页端使用体验: 会话文件夹 + 消息导航 + KaTeX 公式复制修正 + 默认折叠思考。',
+        version: '2026.11.14.2115',
+        description: '优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。',
         author: 'sherlocknieh',
         match: [
             'https://chat.deepseek.com/*',
@@ -198,7 +198,6 @@ export default defineConfig({
         downloadURL: 'https://github.com/sherlocknieh/deepseek-web-toolkit/raw/main/dist/deepseek-web-toolkit.user.js',
         updateURL: 'https://github.com/sherlocknieh/deepseek-web-toolkit/raw/main/dist/deepseek-web-toolkit.user.js',
         grant: ['GM_setValue', 'GM_getValue'],
-        // 导航断点必须在应用初始化前改写，否则导航已被卸载
         'run-at': 'document-start',
       },
       build: {
