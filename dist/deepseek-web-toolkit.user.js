@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 修复+优化
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.14.2115
+// @version      2026.11.16.0223
 // @author       sherlocknieh
 // @description  优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。
 // @license      MIT
@@ -1908,7 +1908,7 @@
 	function resolveScroller(blocks) {
 		if (ADAPTER && ADAPTER.scroller) {
 			const hinted = blocks[0].closest(ADAPTER.scroller);
-			if (hinted && hinted.scrollHeight > hinted.clientHeight + 40) return hinted;
+			if (hinted) return hinted;
 		}
 		let best = null;
 		let bestHeight = 0;
@@ -2080,6 +2080,16 @@
 		if (!state.root) return;
 		state.root.classList.toggle("is-visible", state.entries.length >= MIN_ENTRIES);
 	}
+	function clearMessageNav() {
+		detachScroller();
+		state.entries = [];
+		state.signature = "";
+		state.activeKey = null;
+		state.topInset = 0;
+		state.rows.forEach((row) => row.remove());
+		state.rows = [];
+		syncVisibility();
+	}
 	function attachScroller(scroller) {
 		detachScroller();
 		state.scroller = scroller;
@@ -2105,15 +2115,13 @@
 	function refreshMessageNav() {
 		const entries = readEntries();
 		if (entries.length < MIN_ENTRIES) {
-			state.entries = entries;
-			state.signature = "";
-			syncVisibility();
+			clearMessageNav();
 			return;
 		}
 		const scroller = resolveScroller(entries.map((entry) => entry.el));
 		if (!scroller) {
+			clearMessageNav();
 			scheduleWatch();
-			syncVisibility();
 			return;
 		}
 		if (scroller !== state.scroller) attachScroller(scroller);

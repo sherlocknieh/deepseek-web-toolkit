@@ -149,7 +149,8 @@ function getMessageBlocks() {
 function resolveScroller(blocks) {
     if (ADAPTER && ADAPTER.scroller) {
         const hinted = blocks[0].closest(ADAPTER.scroller);
-        if (hinted && hinted.scrollHeight > hinted.clientHeight + 40) return hinted;
+        // 短会话内容可能尚未溢出，但仍需要用站点指定的容器承载导航和后续消息变化。
+        if (hinted) return hinted;
     }
 
     let best = null;
@@ -402,6 +403,17 @@ function syncVisibility() {
     state.root.classList.toggle('is-visible', state.entries.length >= MIN_ENTRIES);
 }
 
+function clearMessageNav() {
+    detachScroller();
+    state.entries = [];
+    state.signature = '';
+    state.activeKey = null;
+    state.topInset = 0;
+    state.rows.forEach(row => row.remove());
+    state.rows = [];
+    syncVisibility();
+}
+
 function attachScroller(scroller) {
     detachScroller();
     state.scroller = scroller;
@@ -433,17 +445,15 @@ export function refreshMessageNav() {
     const entries = readEntries();
 
     if (entries.length < MIN_ENTRIES) {
-        state.entries = entries;
-        state.signature = '';
-        syncVisibility();
+        clearMessageNav();
         return;
     }
 
     const scroller = resolveScroller(entries.map(entry => entry.el));
     if (!scroller) {
         // 页面还没排好版时可能暂时找不到滚动容器，隔一会儿再认一次
+        clearMessageNav();
         scheduleWatch();
-        syncVisibility();
         return;
     }
 
