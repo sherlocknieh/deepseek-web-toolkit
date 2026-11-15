@@ -3,9 +3,9 @@
  * 发布脚本: 升版本号并构建，然后把源码、配置和产物放进同一个提交并打标签。
  *
  * 用法:
- *   npm run release "feat: 支持 xxx"        # 发布
- *   npm run release "fix: 修复 xxx" --push  # 发布并推送分支与标签
- *   npm run release --dry-run               # 只打印将要使用的版本号
+ *   npm run release "feat: 支持 xxx"          # 发布并推送分支与标签
+ *   npm run release "fix: 修复 xxx" --no-push # 只提交和打标签，不推送
+ *   npm run release --dry-run                 # 只打印将要使用的版本号
  */
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -18,7 +18,7 @@ const DIST_PATH = path.join(root, 'dist/deepseek-web-toolkit.user.js');
 
 const argv = process.argv.slice(2);
 const flags = new Set(argv.filter((arg) => arg.startsWith('--')));
-const push = flags.has('--push');
+const push = !flags.has('--no-push');
 const dryRun = flags.has('--dry-run');
 const message = argv
     .filter((arg) => !arg.startsWith('--'))
@@ -64,4 +64,4 @@ try {
 }
 
 console.log(`\n✓ 发布完成: ${version}`);
-if (!push) console.log('提示: 使用 --push 可自动推送分支与标签。');
+if (!push) console.log('提示: 已跳过推送，确认后可用 git push origin HEAD --tags 补推。');

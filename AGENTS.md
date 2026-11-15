@@ -1,5 +1,7 @@
 # DeepSeek 工具箱 — Agent Index
 
+> 本文件是定位代码的速查表，不是项目介绍。新增文件、调整职责或改动常见任务路径时必须同步更新。
+
 DeepSeek 油猴脚本，一个产物包含四块互不依赖的功能：会话目录（置顶区里名称带 `/` 的会话原地折叠成目录）、KaTeX 复制修正（注入官方 copy-tex）、消息导航（所有站点都用通用实现，DeepSeek 的原生导航被隐藏）、默认折叠思考。Vite + vite-plugin-monkey，源码在 `src/`，产物在 `dist/deepseek-web-toolkit.user.js`。
 
 ## 快速命令
@@ -8,7 +10,7 @@ DeepSeek 油猴脚本，一个产物包含四块互不依赖的功能：会话�
 npm run dev                    # 开发调试
 npm run build                  # 只构建，不动版本号
 npm run hooks                  # 启用 .dev/githooks（提交前自动升版本+构建）
-npm run release "feat: xxx"    # 升版本 → 构建 → commit → tag（--push 推送）
+npm run release "feat: xxx"    # 升版本 → 构建 → commit → tag → push（--no-push 不推送）
 npm run release --dry-run      # 只预览版本号
 ```
 
@@ -40,7 +42,7 @@ npm run release --dry-run      # 只预览版本号
 | `folder.js` | 整目录子树改名与占位迁移（拖动与重命名共用） |
 | `styles.js` | 注入目录/拖动/导航样式；图标字体单独按需加载 |
 | `utils.js` | 启动等待 |
-| `.dev/` | 开发构建相关代码：`bump-and-build.mjs` / `release.mjs` / `githooks/pre-commit` / 真机调试 `browser-debug.mjs`（`build/` 为调试产物，已忽略） |
+| `.dev/` | 开发构建相关代码：`bump-and-build.mjs` / `release.mjs` / `dev-kit.mjs`（CSP 载入器与单文件调试包）/ `githooks/pre-commit` / 真机调试 `browser-debug.mjs`（`build/` 为调试产物，已忽略） |
 
 ## 关键不变量
 
