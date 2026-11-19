@@ -161,11 +161,11 @@ export function addCSSClass() {
             box-shadow: inset 0 0 0 1.5px rgba(103, 112, 254, 0.55);
         }
 
-        /* 通用消息导航（所有站点；DeepSeek 的原生导航已隐藏）：几何照搬原生导航——
-           右侧固定 34×300，收起时只露一颗 34×292 的毛玻璃胶囊和一列横线；
-           悬停后换成 240 宽、按内容高度垂直居中的实色提问列表 */
+        /* 通用消息导航（所有站点；DeepSeek 的原生导航已隐藏）：右侧一列横线，
+           悬停展开成 240 宽、按内容高度垂直居中的实色提问列表。
+           容器高度跟着横线数量走，收起时命中区只有 34px 宽的一小条，
+           不会留下一整条透明区域挡住正文右侧的点击 */
         .dscf-msgnav {
-            --dscf-nav-bg: rgba(255, 255, 255, 0.8);
             --dscf-nav-solid: #ffffff;
             --dscf-nav-border: transparent;
             --dscf-nav-shadow: 0 0 1px 0 rgba(0, 0, 0, 0.2), 0 0 4px 0 rgba(0, 0, 0, 0.02), 0 12px 32px 0 rgba(0, 0, 0, 0.08);
@@ -178,47 +178,27 @@ export function addCSSClass() {
             right: 16px;
             transform: translateY(-50%);
             width: 34px;
-            height: 300px;
             z-index: 40;
             display: none;
+            /* 列表靠右对齐，展开时向左溢出容器；容器自身仍是 34px */
+            justify-content: flex-end;
             user-select: none;
         }
 
         .dscf-msgnav.is-visible {
-            display: block;
+            display: flex;
         }
 
-        /* 窄屏也让出位置而不是整个隐藏：收起时只是右侧一条 34px 的胶囊，展开是悬停操作，
+        /* 窄屏也让出位置而不是整个隐藏：收起时只是右侧一列 34px 宽的横线，展开是悬停操作，
            压住正文的范围有限，隐藏反而让窄屏用户完全用不到导航 */
 
-        /* 胶囊底色单独一层：收起时只有它可见，展开后被列表的实色背景盖住 */
-        .dscf-msgnav-pill {
-            position: absolute;
-            top: 50%;
-            right: 0;
-            transform: translateY(-50%);
-            width: 34px;
-            height: calc(100% - 8px);
-            border-radius: 16px;
-            transition: opacity 0.2s ease;
-        }
-
-        /* 展开后由列表的实色背景接管，避免胶囊在列表上下露出半截 */
-        .dscf-msgnav:hover .dscf-msgnav-pill,
-        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-pill {
-            opacity: 0;
-        }
-
-        /* 列表宽度固定 240：收起时透明、只漏出右侧横线，展开时条目不再横向跳动 */
+        /* 列表宽度固定 240：收起时透明、只漏出右侧横线，展开时条目不再横向跳动。
+           高度由条目内容决定，容器不再撑到固定 300px */
         .dscf-msgnav-list {
-            position: absolute;
-            top: 50%;
-            right: 0;
-            transform: translateY(-50%);
+            flex: 0 0 240px;
             display: flex;
             flex-direction: column;
-            width: 240px;
-            max-height: 100%;
+            max-height: 292px;
             box-sizing: border-box;
             border: 1px solid transparent;
             border-radius: 16px;
@@ -235,7 +215,7 @@ export function addCSSClass() {
             pointer-events: auto;
         }
 
-        /* 列表高度随条目走，最多撑满胶囊；条目整体在胶囊里垂直居中 */
+        /* 列表高度随条目走，最多撑满容器；条目整体垂直居中 */
         .dscf-msgnav-items {
             flex: 0 1 auto;
             max-height: 290px;
@@ -322,12 +302,11 @@ export function addCSSClass() {
         }
 
         /* 深色主题：各站点标记不同（ChatGPT/Grok 用 html.dark，DeepSeek 用 body.dark，
-           Gemini 用 dark-theme / data-theme），全部跟随，免得深色底上画出浅色胶囊 */
+           Gemini 用 dark-theme / data-theme），全部跟随，免得深色底上画出浅色面板 */
         html.dark .dscf-msgnav,
         body.dark .dscf-msgnav,
         .dark-theme .dscf-msgnav,
         [data-theme="dark"] .dscf-msgnav {
-            --dscf-nav-bg: rgba(21, 21, 23, 0.6);
             --dscf-nav-solid: #232324;
             --dscf-nav-border: rgba(255, 255, 255, 0.06);
             --dscf-nav-title: #adb2b8;

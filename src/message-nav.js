@@ -347,13 +347,10 @@ function setActive(key) {
 function ensureDom() {
     if (state.root) return;
 
-    // 结构对齐 DeepSeek 原生导航：底部一层毛玻璃胶囊，上面一层列表；收起时列表透明
+    // 收起时只有一列横线，展开后叠一层实色列表；容器高度随条目数量变化
     const root = document.createElement('div');
     root.className = 'dscf-msgnav';
     root.setAttribute(NAV_ATTR, '1');
-
-    const pill = document.createElement('div');
-    pill.className = 'dscf-msgnav-pill';
 
     const list = document.createElement('div');
     list.className = 'dscf-msgnav-list';
@@ -362,7 +359,7 @@ function ensureDom() {
     items.className = 'dscf-msgnav-items';
     list.append(items);
 
-    root.append(pill, list);
+    root.append(list);
     document.body.appendChild(root);
 
     state.root = root;
