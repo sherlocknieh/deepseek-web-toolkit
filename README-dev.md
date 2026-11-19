@@ -31,9 +31,9 @@
 ## 安装与调试
 
 ```shell
-npm install
-npm run hooks   # 指向 .dev/githooks，启用提交前自动升版本+构建
-npm run dev
+nub install
+nub run hooks   # 指向 .dev/githooks，启用提交前自动升版本+构建
+nub run dev
 ```
 
 把终端输出的 `http://localhost:5173/__vite-plugin-monkey.install.user.js` 装进油猴，打开 https://chat.deepseek.com ，改 `src/main.js` 保存即热更新。
@@ -45,8 +45,8 @@ npm run dev
 版本号在 `vite.config.js` 的 `userscript.version`，由脚本按本地时间生成 `YYYY.MM.DD.HHmm`，**不要手改，也不要手改 `dist`**。
 
 - 提交前钩子 `.dev/githooks/pre-commit` → `.dev/bump-and-build.mjs`：升版本 → 构建 → 核对产物 `@version`，失败还原配置并中断提交
-- `npm run release "feat: …"`：升版本 → 构建 → commit → tag → push；`--no-push` 只提交和打标签，`--dry-run` 只预览版本号
-- `npm run build`：只构建，不改版本号
+- `nub run release "feat: …"`：升版本 → 构建 → commit → tag → push；`--no-push` 只提交和打标签，`--dry-run` 只预览版本号
+- `nub run build`：只构建，不改版本号
 
 ## Firefox
 
@@ -54,7 +54,8 @@ npm run dev
 
 ## 结构
 
-- `src/*.js`：按职责拆分，模块图与改动路径见 [AGENTS.md](./AGENTS.md)
+- `src/*.js`：按职责拆分
 - `vite.config.js`：userscript 元数据与构建输出
 - `.dev/bump-and-build.mjs` / `.dev/release.mjs` / `.dev/githooks/pre-commit`：版本号与发布
-- `.dev/dev-kit.mjs`：开发期 CSP 载入器与单文件调试包，只在 `npm run dev` 时生效
+- `.dev/dev-kit.mjs`：开发期 CSP 载入器与单文件调试包，只在 `nub run dev` 时生效
+- `nub.lock`：依赖锁定，由 `nub install` 维护，不要手改

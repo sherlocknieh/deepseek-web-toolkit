@@ -2,8 +2,8 @@ import { defineConfig } from 'vite';
 import monkey from 'vite-plugin-monkey';
 import { devBundle, devCspNonce } from './.dev/dev-kit.mjs';
 
-// 开发：npm run dev 后把终端里的 dev 版 userscript 装进油猴，改代码自动热更新
-// 构建：npm run build 直接覆盖 dist 下的发布文件，保持 README 安装链接不变
+// 开发：nub run dev 后把终端里的 dev 版 userscript 装进油猴，改代码自动热更新
+// 构建：nub run build 直接覆盖 dist 下的发布文件，保持 README 安装链接不变
 // 版本号：由 .dev/bump-and-build.mjs 按日期时间写入，不要手改
 // 开发载入器（CSP 站点的 nonce / blob 兜底）见 .dev/dev-kit.mjs
 export default defineConfig({
@@ -15,7 +15,7 @@ export default defineConfig({
       userscript: {
         name: 'DeepSeek 修复+优化',
         namespace: 'http://tampermonkey.net/',
-        version: '2026.11.19.1332',
+        version: '2026.11.19.1335',
         description: '优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。',
         author: 'sherlocknieh',
         match: [

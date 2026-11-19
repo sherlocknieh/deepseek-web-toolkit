@@ -69,9 +69,8 @@ writeFileSync(
     configSource.replace(VERSION_PATTERN, (_match, prefix, _version, suffix) => `${prefix}${version}${suffix}`),
 );
 
-const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-console.log('\n▶ 构建产物 (npm run build)');
-const built = spawnSync(npm, ['run', 'build'], { cwd: root, stdio: 'inherit' });
+console.log('\n▶ 构建产物 (nub run build)');
+const built = spawnSync('nub', ['run', 'build'], { cwd: root, stdio: 'inherit' });
 if (built.status !== 0) {
     writeFileSync(CONFIG_PATH, configSource);
     console.error('\n✗ 构建失败，已还原 vite.config.js');
