@@ -7,6 +7,9 @@ import { devBundle, devCspNonce } from './.dev/dev-kit.mjs';
 // 版本号：由 .dev/bump-and-build.mjs 按日期时间写入，不要手改
 // 开发载入器（CSP 站点的 nonce / blob 兜底）见 .dev/dev-kit.mjs
 export default defineConfig({
+  server: {
+    open: true,
+  },
   plugins: [
     devCspNonce(),
     devBundle(),
@@ -15,7 +18,7 @@ export default defineConfig({
       userscript: {
         name: 'DeepSeek 修复+优化',
         namespace: 'http://tampermonkey.net/',
-        version: '2026.11.25.1621',
+        version: '2026.11.25.1622',
         description: '优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。',
         author: 'sherlocknieh',
         match: [

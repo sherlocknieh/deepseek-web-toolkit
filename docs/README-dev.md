@@ -38,7 +38,7 @@ nub run hooks   # 指向 .dev/githooks，启用提交前自动升版本+构建
 nub run dev
 ```
 
-把终端输出的 `http://localhost:5173/__vite-plugin-monkey.install.user.js` 装进油猴，打开 https://chat.deepseek.com ，改 `src/main.js` 保存即热更新。
+把终端输出的 `http://localhost:5173/__vite-plugin-monkey.install.user.js` 装进油猴，打开 https://chat.deepseek.com ，改 `src/main.js` 保存即热更新。`server.open: true` 会在启动时自动打开这个安装页。
 
 注意：严格 CSP 站点会拦 localhost 脚本。调试载入器优先复用页面 script 的 nonce（ChatGPT）；页面策略没有 nonce-source 时（Gemini）改由油猴请求取单文件包，再以页面允许的 `blob:` 执行，改代码后约 1 秒自动重载。Chrome 142+ 还需允许 Local network access，更新过载入器后要在油猴里重装一次 `server:` 版。
 
