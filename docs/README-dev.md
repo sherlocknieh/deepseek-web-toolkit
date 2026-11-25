@@ -24,7 +24,8 @@
 - 各站点选择器：ChatGPT `[data-message-author-role]` / `[data-chatgpt-search-unit-key]` + `main`；Gemini `user-query, model-response`（正文取 `div.query-content` / `message-content`）+ `infinite-scroller`；Grok `div[id^='response-']`（用户消息靠 `[data-testid=user-message]` 判定，正文取 `.response-content-markdown`）+ `main`；DeepSeek `[data-virtual-list-item-key]`（回答里有 `.ds-markdown`）+ `.ds-scroll-area`；思畅 AI `.chat-message-copy`（用户）/ `.chat-message-markdown`（回答）+ `[data-slot=scroll-area-viewport]`；Venice agentic 页 `[role=group]` / `.assistant`、经典聊天页 `[data-message-id]`，滚动容器按最近的滚动祖先现找
 - 适配项的 `scroller` 既可写选择器，也可写成 `(block) => element` 的函数：Venice 经典聊天的滚动容器只带内联样式、没有类名，只能从消息块往上找最近的 `overflow-y: auto/scroll` 祖先，且不要求已经溢出，短会话也要认下容器
 - 命中元素若被其他命中元素包含会被丢掉，避免容器和子元素重复计数；角色优先读标记，读不到时按提问/回答交替推断；导航只列用户提问，回答不进列表
-- 每条提问按消息块序号取紧随其后的回答块（`replyKey` / `replyEl`），回答晚于提问出现时签名会变化并重画条目，箭头按钮随之启用；行本身是容器，内部两个按钮分别跳提问和回答，回答还没出现时箭头按钮隐藏
+- 每条提问按消息块序号取紧随其后的回答块（`replyKey` / `replyEl` / `replyText`），回答晚于提问出现时签名会变化并重画条目，回答按钮随之启用；行本身是容器，内部两个按钮分别跳当前预览和切换预览
+- 预览区叠着提问与回答两段文字，当前侧靠 `flex-grow` 从 0 宽度展开、另一侧同时收缩；左边图标标明当前预览的类型（圆圈问号 / 气泡），右侧按钮显示另一侧的图标，点击后切换预览并跳到对应消息。回答流式输出时签名不变，只把最新正文原地写回，避免整列重画
 - 形态照搬 DeepSeek 原生导航（尺寸取自其线上样式）：fixed 右侧 16px、垂直居中、高 300px，收起 34px、悬停展开 240px；条目 30px 高，横线 8×2，当前项放大 1.5 倍并变品牌色；展开后列表可滚动并带上下同色渐隐；窄屏也常显（不再按 768px 隐藏）
 - 跳转直接改滚动容器的 `scrollTop`：停在底部时站点（Grok 已确认）会把平滑滚动逐帧拉回，动画会被整段吞掉；同时按首条消息距滚动原点的距离让出悬浮标题高度，目标不会被压在标题下面
 - 横线高亮跟随滚动（悬停展开时自动滚进可见范围），阈值是内容区顶端那条线；跳转后按目标气泡（`SITE_ADAPTERS.bubble`）的矩形在固定叠层上短暂发光，不整行刷底，也不受站点包裹层裁剪影响

@@ -1,14 +1,15 @@
 import { runtime } from './runtime.js';
 
 // 通用消息导航：复刻 DeepSeek 原生导航——右侧一颗胶囊收成一列横线，悬停展开提问列表，
-// 点击条目跳到对应提问，条目上的箭头按钮跳到紧随其后的回答。所有站点（含 DeepSeek）
-// 都用这一套，DeepSeek 的原生导航由样式隐藏；实现只依赖 DOM，不碰站点内部实例。
+// 点击条目跳到当前预览的消息；条目右侧的回答图标按钮把预览从提问切成回答并跳过去，
+// 再点一下（此时显示提问图标）切回提问。所有站点（含 DeepSeek）都用这一套，
+// DeepSeek 的原生导航由样式隐藏；实现只依赖 DOM，不碰站点内部实例。
 //
 // 识别规则：
 //   消息块 —— 按站点各自的结构取；没有适配的站点才退回通用语义标记
 //   滚动容器 —— 同时包含多条消息、内容最高的可滚动区块
 //   角色 —— 优先读站点标记，读不到时按提问/回答交替推断；只把提问放进导航，
-//           每条提问再记下紧随其后那条回答的序号，供条目上的箭头按钮跳转
+//           每条提问再记下紧随其后那条回答的序号与正文，供预览切换和跳转
 
 // 有一条提问就出导航：DeepSeek 原生导航同样单条提问即常显，这里保持一致
 const NAV_ATTR = 'data-dscf-msgnav';
@@ -149,15 +150,18 @@ const state = {
     refreshTimer: null,
     watchTimer: null,
     halo: null,
-    haloToken: 0
+    haloToken: 0,
+    // 当前切成「回答预览」的提问 key；切回提问时移除，列表重画后仍按它恢复模式
+    answerPreview: new Set()
 };
 
 // 取消息正文：先按站点收敛到气泡元素，再去掉按钮和工具栏文案后压成单行
 function readText(el) {
     const source = ADAPTER && ADAPTER.content ? ADAPTER.content(el) : el;
     const clone = source.cloneNode(true);
-    // 读屏专用文案（Gemini 复述的提问、ChatGPT/Grok 的「你说」）会和正文重复，一并剔除
-    clone.querySelectorAll('button, svg, [aria-hidden="true"], nav, form, .sr-only, .cdk-visually-hidden').forEach(node => node.remove());
+    // 读屏专用文案（Gemini 复述的提问、ChatGPT/Grok 的「你说」）会和正文重复，一并剔除；
+    // 思考区也算回答块里的前置内容，预览只取正式回答，不把思考过程当正文
+    clone.querySelectorAll('button, svg, [aria-hidden="true"], nav, form, .sr-only, .cdk-visually-hidden, .ds-think-content').forEach(node => node.remove());
     return (clone.textContent || '').replace(/\s+/g, ' ').trim();
 }
 
@@ -236,9 +240,9 @@ function resolveScroller(blocks) {
         .sort((a, b) => b.scrollHeight - a.scrollHeight)[0] || null;
 }
 
-// 消息条目：只列用户提问，回答不进导航；key 用消息块序号，站内 DOM 被重建后仍能重新定位。
-// 每条提问顺带记住紧随其后的回答块（序号 + 元素）：回答可能晚于提问出现，签名里带上它，
-// 回答一渲染出来旧条目就会重画，箭头按钮随之启用
+// 消息条目：只列用户提问，回答不进列表；key 用消息块序号，站内 DOM 被重建后仍能重新定位。
+// 每条提问顺带记住紧随其后的回答块（序号、元素、正文）：回答晚于提问出现时签名里带上序号，
+// 回答一渲染出来旧条目就会重画，回答预览按钮随之启用；正文只做原地更新，不因流式输出反复重建
 function readEntries() {
     const blocks = getMessageBlocks().map((el, index) => ({
         key: String(index),
@@ -255,7 +259,8 @@ function readEntries() {
             return {
                 ...entry,
                 replyKey: reply ? reply.key : null,
-                replyEl: reply ? reply.el : null
+                replyEl: reply ? reply.el : null,
+                replyText: reply ? reply.text : ''
             };
         })
         .filter(Boolean);
@@ -450,30 +455,108 @@ function ensureDom() {
     state.list = items;
 }
 
-// 跳到回答的箭头图标：内联 SVG，不依赖 Font Awesome（其他站点不加载图标字体）
-const REPLY_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">'
-    + '<path d="M8 3.5v8.4m0 0 3.3-3.3M8 11.9 4.7 8.6" fill="none" stroke="currentColor"'
-    + ' stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+// 提问/回答图标：内联 SVG，不依赖 Font Awesome（其他站点不加载图标字体）。
+// 提问是圆圈问号，回答是带正文线的气泡，14px 下也能一眼分开
+const QUESTION_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">'
+    + '<circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.4"/>'
+    + '<path d="M6.1 6.2a1.9 1.9 0 1 1 2.6 1.8c-.45.2-.7.5-.7 1v.2" fill="none"'
+    + ' stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>'
+    + '<circle cx="8" cy="11.1" r=".75" fill="currentColor"/>'
+    + '</svg>';
+
+const ANSWER_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">'
+    + '<path d="M3.1 3.2h9.8a1.2 1.2 0 0 1 1.2 1.2v5.1a1.2 1.2 0 0 1-1.2 1.2H7.6L4.6 13.2v-2.5H3.1a1.2 1.2 0 0 1-1.2-1.2V4.4a1.2 1.2 0 0 1 1.2-1.2Z"'
+    + ' fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>'
+    + '<path d="M4.8 6h6.4M4.8 8.1h4.3" fill="none" stroke="currentColor"'
+    + ' stroke-width="1.3" stroke-linecap="round"/>'
+    + '</svg>';
+
+// 行内预览在提问和回答之间切换：左边图标标明当前预览的是哪一侧，
+// 右侧按钮显示另一侧的图标，点一下就把预览切到那一侧并跳过去
+function isShowingAnswer(entry) {
+    return Boolean(entry.replyKey) && state.answerPreview.has(entry.key);
+}
+
+function previewLabel(entry, showingAnswer) {
+    const text = showingAnswer ? entry.replyText : entry.text;
+    return (showingAnswer ? '跳到回答：' : '跳到提问：') + (text || '（无正文）');
+}
+
+// 模式切换只更新这一行，不整列重画；文字宽度由样式里的 flex-grow 过渡完成收缩/展开
+function applyAnswerPreview(entry, showingAnswer) {
+    const row = state.rows.find(item => item.dataset.key === entry.key);
+    if (!row) return;
+
+    row.classList.toggle('is-showing-answer', showingAnswer);
+
+    const role = row.querySelector('.dscf-msgnav-role');
+    if (role) role.innerHTML = showingAnswer ? ANSWER_ICON : QUESTION_ICON;
+
+    const toggle = row.querySelector('.dscf-msgnav-toggle');
+    if (toggle && !toggle.disabled) {
+        toggle.innerHTML = showingAnswer ? QUESTION_ICON : ANSWER_ICON;
+        toggle.title = showingAnswer ? '返回提问预览' : '展开回答预览';
+        toggle.setAttribute('aria-label', toggle.title);
+    }
+
+    const jump = row.querySelector('.dscf-msgnav-jump');
+    jump?.setAttribute('aria-label', previewLabel(entry, showingAnswer));
+}
+
+function toggleAnswerPreview(entry) {
+    if (!entry.replyKey) return;
+    const showingAnswer = !state.answerPreview.has(entry.key);
+    if (showingAnswer) {
+        state.answerPreview.add(entry.key);
+    } else {
+        state.answerPreview.delete(entry.key);
+    }
+
+    applyAnswerPreview(entry, showingAnswer);
+    if (showingAnswer) {
+        jumpToReply(entry);
+    } else {
+        jumpTo(entry);
+    }
+}
 
 function renderItems() {
     ensureDom();
 
     state.rows.forEach(row => row.remove());
     state.rows = state.entries.map(entry => {
-        // 行本身是容器：一个按钮跳提问，另一个按钮跳回答，按钮不能互相嵌套
+        const showingAnswer = isShowingAnswer(entry);
+
+        // 行本身是容器：一个按钮跳当前预览的消息，另一个按钮切换预览并跳转，按钮不能互相嵌套
         const row = document.createElement('div');
         row.className = 'dscf-msgnav-item';
         row.classList.toggle('is-active', entry.key === state.activeKey);
+        row.classList.toggle('is-showing-answer', showingAnswer);
         row.dataset.key = entry.key;
 
         const jump = document.createElement('button');
         jump.type = 'button';
         jump.className = 'dscf-msgnav-jump';
+        jump.setAttribute('aria-label', previewLabel(entry, showingAnswer));
 
-        const title = document.createElement('span');
-        title.className = 'dscf-msgnav-title';
-        title.textContent = entry.text || '（无正文）';
-        title.title = entry.text || '';
+        const role = document.createElement('span');
+        role.className = 'dscf-msgnav-role';
+        role.innerHTML = showingAnswer ? ANSWER_ICON : QUESTION_ICON;
+
+        const preview = document.createElement('span');
+        preview.className = 'dscf-msgnav-preview';
+
+        const question = document.createElement('span');
+        question.className = 'dscf-msgnav-text dscf-msgnav-text-question';
+        question.textContent = entry.text || '（无正文）';
+        question.title = entry.text || '';
+
+        const answer = document.createElement('span');
+        answer.className = 'dscf-msgnav-text dscf-msgnav-text-answer';
+        answer.textContent = entry.replyText || '（还没有回答）';
+        answer.title = entry.replyText || '';
+
+        preview.append(question, answer);
 
         const indicator = document.createElement('span');
         indicator.className = 'dscf-msgnav-indicator';
@@ -481,21 +564,53 @@ function renderItems() {
         line.className = 'dscf-msgnav-line';
         indicator.append(line);
 
-        jump.append(title, indicator);
-        jump.addEventListener('click', () => jumpTo(entry));
+        jump.append(role, preview, indicator);
+        jump.addEventListener('click', () => {
+            if (isShowingAnswer(entry)) {
+                jumpToReply(entry);
+            } else {
+                jumpTo(entry);
+            }
+        });
 
-        const reply = document.createElement('button');
-        reply.type = 'button';
-        reply.className = 'dscf-msgnav-reply';
-        reply.disabled = !entry.replyKey;
-        reply.title = entry.replyKey ? '跳到对应回答' : '还没有回答';
-        reply.setAttribute('aria-label', reply.title);
-        reply.innerHTML = REPLY_ICON;
-        if (entry.replyKey) reply.addEventListener('click', () => jumpToReply(entry));
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'dscf-msgnav-toggle';
+        toggle.disabled = !entry.replyKey;
+        toggle.title = showingAnswer ? '返回提问预览' : (entry.replyKey ? '展开回答预览' : '还没有回答');
+        toggle.setAttribute('aria-label', toggle.title);
+        toggle.innerHTML = showingAnswer ? QUESTION_ICON : ANSWER_ICON;
+        if (entry.replyKey) toggle.addEventListener('click', () => toggleAnswerPreview(entry));
 
-        row.append(jump, reply);
+        row.append(jump, toggle);
         state.list.appendChild(row);
         return row;
+    });
+}
+
+// 回答流式输出时正文一直在变，签名不变就只把最新文字写回现有行，避免整列重画打断操作
+function syncEntryTexts() {
+    const byKey = new Map(state.entries.map(entry => [entry.key, entry]));
+    state.rows.forEach(row => {
+        const entry = byKey.get(row.dataset.key);
+        if (!entry) return;
+
+        const question = row.querySelector('.dscf-msgnav-text-question');
+        if (question) {
+            question.textContent = entry.text || '（无正文）';
+            question.title = entry.text || '';
+        }
+
+        const answer = row.querySelector('.dscf-msgnav-text-answer');
+        if (answer) {
+            answer.textContent = entry.replyText || '（还没有回答）';
+            answer.title = entry.replyText || '';
+        }
+
+        const jump = row.querySelector('.dscf-msgnav-jump');
+        if (jump) {
+            jump.setAttribute('aria-label', previewLabel(entry, row.classList.contains('is-showing-answer')));
+        }
     });
 }
 
@@ -510,6 +625,7 @@ function clearMessageNav() {
     state.signature = '';
     state.activeKey = null;
     state.topInset = 0;
+    state.answerPreview.clear();
     state.rows.forEach(row => row.remove());
     state.rows = [];
     syncVisibility();
@@ -562,16 +678,16 @@ export function refreshMessageNav() {
     state.topInset = readTopInset(scroller, entries.map(entry => entry.el));
 
     const signature = makeSignature(entries);
-    if (signature === state.signature) {
-        syncVisibility();
-        updateActive();
-        return;
-    }
-
-    state.signature = signature;
     state.entries = entries;
 
-    renderItems();
+    if (signature !== state.signature) {
+        state.signature = signature;
+        renderItems();
+    } else {
+        // 条目不增不减时只同步正文，流式回答也能实时更新预览
+        syncEntryTexts();
+    }
+
     syncVisibility();
     updateActive();
 }
@@ -625,6 +741,7 @@ export function teardownMessageNav() {
     state.activeKey = null;
     state.signature = '';
     state.topInset = 0;
+    state.answerPreview.clear();
 
     if (runtime.refreshMessageNav === refreshMessageNav) {
         runtime.refreshMessageNav = null;

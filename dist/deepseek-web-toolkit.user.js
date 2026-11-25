@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 修复+优化
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.25.1622
+// @version      2026.11.25.1630
 // @author       sherlocknieh
 // @description  优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。
 // @license      MIT
@@ -314,8 +314,8 @@
             width: 0;
         }
 
-        /* 一项一条消息：标题靠左、横线贴右；收起时标题透明，只留横线。
-           行是容器，内部两个按钮分别跳提问和回答 */
+        /* 一项一条消息：图标和预览文字靠左、横线贴右；收起时文字和图标透明，只留横线。
+           行是容器，内部两个按钮分别跳当前预览、切换提问/回答预览 */
         .dscf-msgnav-item {
             position: relative;
             display: flex;
@@ -344,12 +344,42 @@
             cursor: pointer;
         }
 
-        .dscf-msgnav-title {
+        /* 当前预览侧的图标：提问为圆圈问号，回答为带正文线的气泡 */
+        .dscf-msgnav-role {
+            flex: 0 0 16px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+            margin-right: 6px;
+            color: var(--dscf-nav-title);
+            opacity: 0;
+            transition: opacity 0.1s ease, color 0.2s ease;
+        }
+
+        .dscf-msgnav-role svg {
+            display: block;
+            width: 14px;
+            height: 14px;
+        }
+
+        /* 预览文字：提问和回答叠在同一个位置，宽度靠 flex-grow 一收一放；
+           同时只显示当前预览的那一侧，切换时像标题收缩、另一侧展开 */
+        .dscf-msgnav-preview {
             flex: 1 1 auto;
             min-width: 0;
-            /* 给行内右下角的「跳到回答」按钮让出位置，标题省略号不会压到图标下面 */
-            padding-right: 14px;
+            display: flex;
+            align-items: center;
             margin-right: 12px;
+            /* 给右侧的切换按钮让位，省略号不会压到图标下面 */
+            padding-right: 14px;
+            overflow: hidden;
+        }
+
+        .dscf-msgnav-text {
+            flex: 0 0 0;
+            min-width: 0;
             font-size: 13px;
             line-height: 20px;
             white-space: nowrap;
@@ -357,11 +387,26 @@
             text-overflow: ellipsis;
             color: var(--dscf-nav-title);
             opacity: 0;
-            transition: opacity 0.1s ease, color 0.2s ease;
+            transition: flex-grow 0.18s ease, opacity 0.18s ease, color 0.2s ease;
         }
 
-        /* 跳到回答：叠在标题与横线之间，绝对定位保证收起时横线位置不跟着挪动 */
-        .dscf-msgnav-reply {
+        /* 展开列表（悬停或键盘聚焦）时，只让当前预览侧从 0 宽度长到整行 */
+        .dscf-msgnav:hover .dscf-msgnav-item:not(.is-showing-answer) .dscf-msgnav-text-question,
+        .dscf-msgnav:hover .dscf-msgnav-item.is-showing-answer .dscf-msgnav-text-answer,
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-item:not(.is-showing-answer) .dscf-msgnav-text-question,
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-item.is-showing-answer .dscf-msgnav-text-answer {
+            flex-grow: 1;
+            opacity: 1;
+        }
+
+        .dscf-msgnav:hover .dscf-msgnav-role,
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-role {
+            opacity: 1;
+        }
+
+        /* 切换预览：叠在文字与横线之间，绝对定位保证收起时横线位置不跟着挪动；
+           提问模式下显示回答图标，回答模式下显示提问图标 */
+        .dscf-msgnav-toggle {
             position: absolute;
             top: 50%;
             right: 18px;
@@ -382,36 +427,31 @@
             transition: opacity 0.1s ease, color 0.2s ease, background-color 0.2s ease;
         }
 
-        .dscf-msgnav-reply svg {
+        .dscf-msgnav-toggle svg {
             display: block;
             width: 14px;
             height: 14px;
         }
 
-        /* 只在列表展开（悬停或键盘聚焦）时露出箭头，收起时仍只有一列横线 */
-        .dscf-msgnav:hover .dscf-msgnav-reply,
-        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-reply {
+        /* 只在列表展开（悬停或键盘聚焦）时露出切换按钮，收起时仍只有一列横线 */
+        .dscf-msgnav:hover .dscf-msgnav-toggle,
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-toggle {
             opacity: 0.55;
             pointer-events: auto;
         }
 
-        .dscf-msgnav-reply:hover,
-        .dscf-msgnav-reply:focus-visible {
+        .dscf-msgnav-toggle:hover,
+        .dscf-msgnav-toggle:focus-visible {
             opacity: 1;
             color: var(--dscf-nav-hover);
             background-color: rgba(103, 112, 254, 0.16);
         }
 
         /* 回答还没出现：保留按钮位置但不响应，避免误以为是可点的 */
-        .dscf-msgnav-reply:disabled {
+        .dscf-msgnav-toggle:disabled {
             opacity: 0 !important;
             pointer-events: none;
             cursor: default;
-        }
-
-        .dscf-msgnav:hover .dscf-msgnav-title,
-        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-title {
-            opacity: 1;
         }
 
         /* 横线的定位盒固定 16×20，横线本身 8×2；当前项放大 1.5 倍并变成品牌色 */
@@ -432,12 +472,13 @@
             transition: background-color 0.2s ease, transform 0.2s ease;
         }
 
-        /* 悬停条目：标题和横线一起提到正文色 */
+        /* 悬停条目：预览文字、图标和横线一起提到正文色 */
         .dscf-msgnav-item:hover .dscf-msgnav-line {
             background-color: var(--dscf-nav-hover);
         }
 
-        .dscf-msgnav-item:hover .dscf-msgnav-title {
+        .dscf-msgnav-item:hover .dscf-msgnav-text,
+        .dscf-msgnav-item:hover .dscf-msgnav-role {
             color: var(--dscf-nav-hover);
         }
 
@@ -446,9 +487,13 @@
             transform: scale(1.5);
         }
 
-        .dscf-msgnav-item.is-active .dscf-msgnav-title {
+        .dscf-msgnav-item.is-active .dscf-msgnav-text {
             color: var(--dscf-nav-active);
             font-weight: 500;
+        }
+
+        .dscf-msgnav-item.is-active .dscf-msgnav-role {
+            color: var(--dscf-nav-active);
         }
 
         /* 深色主题：各站点标记不同（ChatGPT/Grok 用 html.dark，DeepSeek 用 body.dark，
@@ -1952,11 +1997,12 @@
 		refreshTimer: null,
 		watchTimer: null,
 		halo: null,
-		haloToken: 0
+		haloToken: 0,
+		answerPreview: new Set()
 	};
 	function readText(el) {
 		const clone = (ADAPTER && ADAPTER.content ? ADAPTER.content(el) : el).cloneNode(true);
-		clone.querySelectorAll("button, svg, [aria-hidden=\"true\"], nav, form, .sr-only, .cdk-visually-hidden").forEach((node) => node.remove());
+		clone.querySelectorAll("button, svg, [aria-hidden=\"true\"], nav, form, .sr-only, .cdk-visually-hidden, .ds-think-content").forEach((node) => node.remove());
 		return (clone.textContent || "").replace(/\s+/g, " ").trim();
 	}
 	function detectRole(el, index) {
@@ -2020,7 +2066,8 @@
 			return {
 				...entry,
 				replyKey: reply ? reply.key : null,
-				replyEl: reply ? reply.el : null
+				replyEl: reply ? reply.el : null,
+				replyText: reply ? reply.text : ""
 			};
 		}).filter(Boolean);
 	}
@@ -2148,40 +2195,106 @@
 		state.root = root;
 		state.list = items;
 	}
-	var REPLY_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M8 3.5v8.4m0 0 3.3-3.3M8 11.9 4.7 8.6\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>";
+	var QUESTION_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><circle cx=\"8\" cy=\"8\" r=\"6.2\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\"/><path d=\"M6.1 6.2a1.9 1.9 0 1 1 2.6 1.8c-.45.2-.7.5-.7 1v.2\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\" stroke-linecap=\"round\"/><circle cx=\"8\" cy=\"11.1\" r=\".75\" fill=\"currentColor\"/></svg>";
+	var ANSWER_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M3.1 3.2h9.8a1.2 1.2 0 0 1 1.2 1.2v5.1a1.2 1.2 0 0 1-1.2 1.2H7.6L4.6 13.2v-2.5H3.1a1.2 1.2 0 0 1-1.2-1.2V4.4a1.2 1.2 0 0 1 1.2-1.2Z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\" stroke-linejoin=\"round\"/><path d=\"M4.8 6h6.4M4.8 8.1h4.3\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\" stroke-linecap=\"round\"/></svg>";
+	function isShowingAnswer(entry) {
+		return Boolean(entry.replyKey) && state.answerPreview.has(entry.key);
+	}
+	function previewLabel(entry, showingAnswer) {
+		const text = showingAnswer ? entry.replyText : entry.text;
+		return (showingAnswer ? "跳到回答：" : "跳到提问：") + (text || "（无正文）");
+	}
+	function applyAnswerPreview(entry, showingAnswer) {
+		const row = state.rows.find((item) => item.dataset.key === entry.key);
+		if (!row) return;
+		row.classList.toggle("is-showing-answer", showingAnswer);
+		const role = row.querySelector(".dscf-msgnav-role");
+		if (role) role.innerHTML = showingAnswer ? ANSWER_ICON : QUESTION_ICON;
+		const toggle = row.querySelector(".dscf-msgnav-toggle");
+		if (toggle && !toggle.disabled) {
+			toggle.innerHTML = showingAnswer ? QUESTION_ICON : ANSWER_ICON;
+			toggle.title = showingAnswer ? "返回提问预览" : "展开回答预览";
+			toggle.setAttribute("aria-label", toggle.title);
+		}
+		row.querySelector(".dscf-msgnav-jump")?.setAttribute("aria-label", previewLabel(entry, showingAnswer));
+	}
+	function toggleAnswerPreview(entry) {
+		if (!entry.replyKey) return;
+		const showingAnswer = !state.answerPreview.has(entry.key);
+		if (showingAnswer) state.answerPreview.add(entry.key);
+		else state.answerPreview.delete(entry.key);
+		applyAnswerPreview(entry, showingAnswer);
+		if (showingAnswer) jumpToReply(entry);
+		else jumpTo(entry);
+	}
 	function renderItems() {
 		ensureDom();
 		state.rows.forEach((row) => row.remove());
 		state.rows = state.entries.map((entry) => {
+			const showingAnswer = isShowingAnswer(entry);
 			const row = document.createElement("div");
 			row.className = "dscf-msgnav-item";
 			row.classList.toggle("is-active", entry.key === state.activeKey);
+			row.classList.toggle("is-showing-answer", showingAnswer);
 			row.dataset.key = entry.key;
 			const jump = document.createElement("button");
 			jump.type = "button";
 			jump.className = "dscf-msgnav-jump";
-			const title = document.createElement("span");
-			title.className = "dscf-msgnav-title";
-			title.textContent = entry.text || "（无正文）";
-			title.title = entry.text || "";
+			jump.setAttribute("aria-label", previewLabel(entry, showingAnswer));
+			const role = document.createElement("span");
+			role.className = "dscf-msgnav-role";
+			role.innerHTML = showingAnswer ? ANSWER_ICON : QUESTION_ICON;
+			const preview = document.createElement("span");
+			preview.className = "dscf-msgnav-preview";
+			const question = document.createElement("span");
+			question.className = "dscf-msgnav-text dscf-msgnav-text-question";
+			question.textContent = entry.text || "（无正文）";
+			question.title = entry.text || "";
+			const answer = document.createElement("span");
+			answer.className = "dscf-msgnav-text dscf-msgnav-text-answer";
+			answer.textContent = entry.replyText || "（还没有回答）";
+			answer.title = entry.replyText || "";
+			preview.append(question, answer);
 			const indicator = document.createElement("span");
 			indicator.className = "dscf-msgnav-indicator";
 			const line = document.createElement("span");
 			line.className = "dscf-msgnav-line";
 			indicator.append(line);
-			jump.append(title, indicator);
-			jump.addEventListener("click", () => jumpTo(entry));
-			const reply = document.createElement("button");
-			reply.type = "button";
-			reply.className = "dscf-msgnav-reply";
-			reply.disabled = !entry.replyKey;
-			reply.title = entry.replyKey ? "跳到对应回答" : "还没有回答";
-			reply.setAttribute("aria-label", reply.title);
-			reply.innerHTML = REPLY_ICON;
-			if (entry.replyKey) reply.addEventListener("click", () => jumpToReply(entry));
-			row.append(jump, reply);
+			jump.append(role, preview, indicator);
+			jump.addEventListener("click", () => {
+				if (isShowingAnswer(entry)) jumpToReply(entry);
+				else jumpTo(entry);
+			});
+			const toggle = document.createElement("button");
+			toggle.type = "button";
+			toggle.className = "dscf-msgnav-toggle";
+			toggle.disabled = !entry.replyKey;
+			toggle.title = showingAnswer ? "返回提问预览" : entry.replyKey ? "展开回答预览" : "还没有回答";
+			toggle.setAttribute("aria-label", toggle.title);
+			toggle.innerHTML = showingAnswer ? QUESTION_ICON : ANSWER_ICON;
+			if (entry.replyKey) toggle.addEventListener("click", () => toggleAnswerPreview(entry));
+			row.append(jump, toggle);
 			state.list.appendChild(row);
 			return row;
+		});
+	}
+	function syncEntryTexts() {
+		const byKey = new Map(state.entries.map((entry) => [entry.key, entry]));
+		state.rows.forEach((row) => {
+			const entry = byKey.get(row.dataset.key);
+			if (!entry) return;
+			const question = row.querySelector(".dscf-msgnav-text-question");
+			if (question) {
+				question.textContent = entry.text || "（无正文）";
+				question.title = entry.text || "";
+			}
+			const answer = row.querySelector(".dscf-msgnav-text-answer");
+			if (answer) {
+				answer.textContent = entry.replyText || "（还没有回答）";
+				answer.title = entry.replyText || "";
+			}
+			const jump = row.querySelector(".dscf-msgnav-jump");
+			if (jump) jump.setAttribute("aria-label", previewLabel(entry, row.classList.contains("is-showing-answer")));
 		});
 	}
 	function syncVisibility() {
@@ -2194,6 +2307,7 @@
 		state.signature = "";
 		state.activeKey = null;
 		state.topInset = 0;
+		state.answerPreview.clear();
 		state.rows.forEach((row) => row.remove());
 		state.rows = [];
 		syncVisibility();
@@ -2235,14 +2349,11 @@
 		if (scroller !== state.scroller) attachScroller(scroller);
 		state.topInset = readTopInset(scroller, entries.map((entry) => entry.el));
 		const signature = makeSignature(entries);
-		if (signature === state.signature) {
-			syncVisibility();
-			updateActive();
-			return;
-		}
-		state.signature = signature;
 		state.entries = entries;
-		renderItems();
+		if (signature !== state.signature) {
+			state.signature = signature;
+			renderItems();
+		} else syncEntryTexts();
 		syncVisibility();
 		updateActive();
 	}
@@ -2286,6 +2397,7 @@
 		state.activeKey = null;
 		state.signature = "";
 		state.topInset = 0;
+		state.answerPreview.clear();
 		if (runtime.refreshMessageNav === refreshMessageNav) runtime.refreshMessageNav = null;
 	}
 	var THINK_SELECTOR = ".ds-think-content";
