@@ -63,6 +63,15 @@ const SITE_ADAPTERS = [
         // 有正文就落在文字气泡上，纯图片交给圆角图片框兜底
         bubble: el => Array.from(el.querySelectorAll('.ds-message > div'))
             .find(node => (node.innerText || '').trim()),
+        // 回答的跳转落点：消息块顶端是思考栏，对齐它只会看到「已思考」标题，
+        // 正文被推到下面。取不在思考区里的第一块 .ds-markdown，落到它的首个子元素，
+        // 光晕也正好圈住回答开头
+        replyAnchor: el => {
+            const answer = Array.from(el.querySelectorAll('.ds-markdown'))
+                .find(node => !node.parentElement.closest('.ds-markdown')
+                    && !node.closest('.ds-think-content'));
+            return answer && (answer.firstElementChild || answer);
+        },
         scroller: '.ds-scroll-area'
     },
     {
@@ -316,27 +325,32 @@ function jumpTo(entry) {
 // 跳到对应回答：高亮仍落在提问条目上，导航表示的是「当前读到哪一问」
 function jumpToReply(entry) {
     if (!entry.replyKey) return;
-    jumpToKey(entry.replyKey, entry.replyEl, entry.key);
+    jumpToKey(entry.replyKey, entry.replyEl, entry.key, true);
 }
 
-function jumpToKey(key, el, activeKey) {
+function jumpToKey(key, el, activeKey, reply = false) {
     const block = findBlockByKey(key, el);
     if (!block) return;
 
-    const scroller = state.scroller && state.scroller.contains(block)
+    // 回答块顶端往往排着思考栏，对齐它看到的是思考而不是正文；
+    // 站点给了正文锚点就落到锚点，没有锚点的站点仍按整块对齐
+    const target = (reply && ADAPTER && ADAPTER.replyAnchor ? ADAPTER.replyAnchor(block) : null) || block;
+
+    const scroller = state.scroller && state.scroller.contains(target)
         ? state.scroller
-        : scrollParentOf(block);
+        : scrollParentOf(target);
     if (scroller) {
         // 换用兜底容器时 topInset 得按它自己的留白重算，直接沿用别的容器会偏出到头
-        const inset = scroller === state.scroller ? state.topInset : readTopInset(scroller, [block]);
-        scroller.scrollTop = Math.max(0, block.getBoundingClientRect().top
+        const inset = scroller === state.scroller ? state.topInset : readTopInset(scroller, [target]);
+        scroller.scrollTop = Math.max(0, target.getBoundingClientRect().top
             - scroller.getBoundingClientRect().top - scroller.clientTop + scroller.scrollTop
             - inset);
     } else {
-        block.scrollIntoView({ block: 'start' });
+        target.scrollIntoView({ block: 'start' });
     }
 
-    flashEntry(block);
+    // 落到正文锚点时按锚点本身画光晕：整块气泡的顶端已经在视口外，圈出来也看不见
+    flashEntry(target, target !== block);
     setActive(activeKey);
 }
 
@@ -362,9 +376,12 @@ function ensureHalo() {
     return halo;
 }
 
-// 跳转后短暂高亮气泡，提示定位到了哪条提问
-function flashEntry(block) {
-    const bubble = (ADAPTER && ADAPTER.bubble ? ADAPTER.bubble(block) : null) || roundedImageBox(block) || block;
+// 跳转后短暂高亮气泡，提示定位到了哪条提问；exact 用于回答锚点，
+// 此时落点本身就是正文开头，不再套气泡或圆角图片框
+function flashEntry(block, exact = false) {
+    const bubble = exact
+        ? block
+        : (ADAPTER && ADAPTER.bubble ? ADAPTER.bubble(block) : null) || roundedImageBox(block) || block;
     const halo = ensureHalo();
     const radius = getComputedStyle(bubble).borderRadius;
 

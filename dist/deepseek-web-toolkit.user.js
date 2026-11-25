@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 修复+优化
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.25.1630
+// @version      2026.11.25.1656
 // @author       sherlocknieh
 // @description  优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。
 // @license      MIT
@@ -1938,6 +1938,10 @@
 			role: (el) => el.querySelector(".ds-markdown") ? "ASSISTANT" : "USER",
 			content: (el) => el.querySelector(".ds-message") || el,
 			bubble: (el) => Array.from(el.querySelectorAll(".ds-message > div")).find((node) => (node.innerText || "").trim()),
+			replyAnchor: (el) => {
+				const answer = Array.from(el.querySelectorAll(".ds-markdown")).find((node) => !node.parentElement.closest(".ds-markdown") && !node.closest(".ds-think-content"));
+				return answer && (answer.firstElementChild || answer);
+			},
 			scroller: ".ds-scroll-area"
 		},
 		{
@@ -2102,17 +2106,18 @@
 	}
 	function jumpToReply(entry) {
 		if (!entry.replyKey) return;
-		jumpToKey(entry.replyKey, entry.replyEl, entry.key);
+		jumpToKey(entry.replyKey, entry.replyEl, entry.key, true);
 	}
-	function jumpToKey(key, el, activeKey) {
+	function jumpToKey(key, el, activeKey, reply = false) {
 		const block = findBlockByKey(key, el);
 		if (!block) return;
-		const scroller = state.scroller && state.scroller.contains(block) ? state.scroller : scrollParentOf(block);
+		const target = (reply && ADAPTER && ADAPTER.replyAnchor ? ADAPTER.replyAnchor(block) : null) || block;
+		const scroller = state.scroller && state.scroller.contains(target) ? state.scroller : scrollParentOf(target);
 		if (scroller) {
-			const inset = scroller === state.scroller ? state.topInset : readTopInset(scroller, [block]);
-			scroller.scrollTop = Math.max(0, block.getBoundingClientRect().top - scroller.getBoundingClientRect().top - scroller.clientTop + scroller.scrollTop - inset);
-		} else block.scrollIntoView({ block: "start" });
-		flashEntry(block);
+			const inset = scroller === state.scroller ? state.topInset : readTopInset(scroller, [target]);
+			scroller.scrollTop = Math.max(0, target.getBoundingClientRect().top - scroller.getBoundingClientRect().top - scroller.clientTop + scroller.scrollTop - inset);
+		} else target.scrollIntoView({ block: "start" });
+		flashEntry(target, target !== block);
 		setActive(activeKey);
 	}
 	function roundedImageBox(block) {
@@ -2130,8 +2135,8 @@
 		state.halo = halo;
 		return halo;
 	}
-	function flashEntry(block) {
-		const bubble = (ADAPTER && ADAPTER.bubble ? ADAPTER.bubble(block) : null) || roundedImageBox(block) || block;
+	function flashEntry(block, exact = false) {
+		const bubble = exact ? block : (ADAPTER && ADAPTER.bubble ? ADAPTER.bubble(block) : null) || roundedImageBox(block) || block;
 		const halo = ensureHalo();
 		const radius = getComputedStyle(bubble).borderRadius;
 		const place = () => {
