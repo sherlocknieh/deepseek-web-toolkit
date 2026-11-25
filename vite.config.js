@@ -15,7 +15,7 @@ export default defineConfig({
       userscript: {
         name: 'DeepSeek 修复+优化',
         namespace: 'http://tampermonkey.net/',
-        version: '2026.11.19.1335',
+        version: '2026.11.25.1620',
         description: '优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。',
         author: 'sherlocknieh',
         match: [
@@ -23,7 +23,11 @@ export default defineConfig({
             'https://chatgpt.com/*',
             'https://chat.openai.com/*',
             'https://gemini.google.com/*',
-            'https://grok.com/*'
+            'https://grok.com/*',
+            'https://sichang.xyz/*',
+            'https://*.sichang.xyz/*',
+            'https://venice.ai/*',
+            'https://*.venice.ai/*'
         ],
         icon: 'https://www.deepseek.com/favicon.ico',
         license: 'MIT',

@@ -1,3 +1,4 @@
 node_modules/
 .vite/
 .dev/build/
+.agents/

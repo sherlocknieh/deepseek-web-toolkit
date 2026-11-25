@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 修复+优化
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.19.1335
+// @version      2026.11.25.1620
 // @author       sherlocknieh
 // @description  优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。
 // @license      MIT
@@ -13,6 +13,10 @@
 // @match        https://chat.openai.com/*
 // @match        https://gemini.google.com/*
 // @match        https://grok.com/*
+// @match        https://sichang.xyz/*
+// @match        https://*.sichang.xyz/*
+// @match        https://venice.ai/*
+// @match        https://*.venice.ai/*
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        unsafeWindow
@@ -310,13 +314,27 @@
             width: 0;
         }
 
-        /* 一项一条消息：标题靠左、横线贴右；收起时标题透明，只留横线 */
+        /* 一项一条消息：标题靠左、横线贴右；收起时标题透明，只留横线。
+           行是容器，内部两个按钮分别跳提问和回答 */
         .dscf-msgnav-item {
+            position: relative;
             display: flex;
             align-items: center;
             justify-content: flex-end;
             width: 100%;
             height: 30px;
+            color: inherit;
+            font: inherit;
+            text-align: left;
+        }
+
+        .dscf-msgnav-jump {
+            flex: 1 1 auto;
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            height: 100%;
             padding: 0;
             border: 0;
             background: transparent;
@@ -329,6 +347,8 @@
         .dscf-msgnav-title {
             flex: 1 1 auto;
             min-width: 0;
+            /* 给行内右下角的「跳到回答」按钮让出位置，标题省略号不会压到图标下面 */
+            padding-right: 14px;
             margin-right: 12px;
             font-size: 13px;
             line-height: 20px;
@@ -338,6 +358,55 @@
             color: var(--dscf-nav-title);
             opacity: 0;
             transition: opacity 0.1s ease, color 0.2s ease;
+        }
+
+        /* 跳到回答：叠在标题与横线之间，绝对定位保证收起时横线位置不跟着挪动 */
+        .dscf-msgnav-reply {
+            position: absolute;
+            top: 50%;
+            right: 18px;
+            transform: translateY(-50%);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+            padding: 0;
+            border: 0;
+            border-radius: 5px;
+            background: transparent;
+            color: var(--dscf-nav-title);
+            cursor: pointer;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.1s ease, color 0.2s ease, background-color 0.2s ease;
+        }
+
+        .dscf-msgnav-reply svg {
+            display: block;
+            width: 14px;
+            height: 14px;
+        }
+
+        /* 只在列表展开（悬停或键盘聚焦）时露出箭头，收起时仍只有一列横线 */
+        .dscf-msgnav:hover .dscf-msgnav-reply,
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-reply {
+            opacity: 0.55;
+            pointer-events: auto;
+        }
+
+        .dscf-msgnav-reply:hover,
+        .dscf-msgnav-reply:focus-visible {
+            opacity: 1;
+            color: var(--dscf-nav-hover);
+            background-color: rgba(103, 112, 254, 0.16);
+        }
+
+        /* 回答还没出现：保留按钮位置但不响应，避免误以为是可点的 */
+        .dscf-msgnav-reply:disabled {
+            opacity: 0 !important;
+            pointer-events: none;
+            cursor: default;
         }
 
         .dscf-msgnav:hover .dscf-msgnav-title,
@@ -1825,8 +1894,36 @@
 			content: (el) => el.querySelector(".ds-message") || el,
 			bubble: (el) => Array.from(el.querySelectorAll(".ds-message > div")).find((node) => (node.innerText || "").trim()),
 			scroller: ".ds-scroll-area"
+		},
+		{
+			hosts: ["sichang.xyz"],
+			selector: ".chat-message-markdown, .chat-message-copy",
+			role: (el) => {
+				if (el.closest("[class*=\"bg-bubble-assistant\"]")) return "ASSISTANT";
+				if (el.closest("[class*=\"bg-bubble-user\"]")) return "USER";
+				return el.classList.contains("chat-message-markdown") ? "ASSISTANT" : "USER";
+			},
+			content: (el) => el,
+			bubble: (el) => el.closest("[class*=\"bg-bubble-\"]"),
+			scroller: "[data-slot=\"scroll-area-viewport\"]"
+		},
+		{
+			hosts: ["venice.ai"],
+			selector: ".minds-chat-scroll-root [role=\"group\"], .minds-chat-scroll-root .assistant, [data-message-id]",
+			role: (el) => {
+				if (el.matches(".assistant") || el.querySelector(".assistant")) return "ASSISTANT";
+				const box = el.querySelector("[data-message-content]");
+				return box && box.getAttribute("data-role") === "assistant" ? "ASSISTANT" : "USER";
+			},
+			content: (el) => el.querySelector(".assistant") || el.querySelector("[data-testid=\"user-message\"]") || el.querySelector("[data-message-content=\"true\"]") || el.querySelector(".assistant-content") || el,
+			bubble: (el) => el.querySelector(".assistant") || el.querySelector("[data-testid=\"user-message\"]") || el.querySelector(".assistant-content"),
+			scroller: scrollableAncestor
 		}
 	];
+	function scrollableAncestor(el) {
+		for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) if (/(auto|scroll)/.test(getComputedStyle(node).overflowY)) return node;
+		return null;
+	}
 	var FALLBACK_SELECTOR = [
 		"[data-message-author-role]",
 		"user-query",
@@ -1884,11 +1981,13 @@
 		const selector = ADAPTER && ADAPTER.selector || FALLBACK_SELECTOR;
 		return dropNested(Array.from(document.querySelectorAll(selector)).filter((el) => el.getClientRects().length > 0));
 	}
+	function hintScroller(block) {
+		if (!ADAPTER || !ADAPTER.scroller) return null;
+		return typeof ADAPTER.scroller === "function" ? ADAPTER.scroller(block) : block.closest(ADAPTER.scroller);
+	}
 	function resolveScroller(blocks) {
-		if (ADAPTER && ADAPTER.scroller) {
-			const hinted = blocks[0].closest(ADAPTER.scroller);
-			if (hinted) return hinted;
-		}
+		const hinted = hintScroller(blocks[0]);
+		if (hinted) return hinted;
 		let best = null;
 		let bestHeight = 0;
 		let node = blocks[0]?.parentElement;
@@ -1908,22 +2007,35 @@
 		}).sort((a, b) => b.scrollHeight - a.scrollHeight)[0] || null;
 	}
 	function readEntries() {
-		return getMessageBlocks().map((el, index) => ({
+		const blocks = getMessageBlocks().map((el, index) => ({
 			key: String(index),
 			el,
 			role: detectRole(el, index),
 			text: readText(el)
-		})).filter(isUserEntry);
+		}));
+		return blocks.map((entry, index) => {
+			if (!isUserEntry(entry)) return null;
+			const next = blocks[index + 1];
+			const reply = next && next.role === "ASSISTANT" ? next : null;
+			return {
+				...entry,
+				replyKey: reply ? reply.key : null,
+				replyEl: reply ? reply.el : null
+			};
+		}).filter(Boolean);
 	}
 	function makeSignature(entries) {
-		return entries.map((entry) => entry.key + ":" + entry.text.slice(0, 12)).join("|");
+		return entries.map((entry) => entry.key + ":" + (entry.replyKey || "-") + ":" + entry.text.slice(0, 12)).join("|");
 	}
 	function isUserEntry(entry) {
 		return entry.role === "USER";
 	}
 	function findBlock(entry) {
-		if (entry.el && entry.el.isConnected) return entry.el;
-		return getMessageBlocks()[Number(entry.key)] || null;
+		return findBlockByKey(entry.key, entry.el);
+	}
+	function findBlockByKey(key, el) {
+		if (el && el.isConnected) return el;
+		return getMessageBlocks()[Number(key)] || null;
 	}
 	var JUMP_GAP = 20;
 	function readTopInset(scroller, blocks) {
@@ -1939,7 +2051,14 @@
 		return null;
 	}
 	function jumpTo(entry) {
-		const block = findBlock(entry);
+		jumpToKey(entry.key, entry.el, entry.key);
+	}
+	function jumpToReply(entry) {
+		if (!entry.replyKey) return;
+		jumpToKey(entry.replyKey, entry.replyEl, entry.key);
+	}
+	function jumpToKey(key, el, activeKey) {
+		const block = findBlockByKey(key, el);
 		if (!block) return;
 		const scroller = state.scroller && state.scroller.contains(block) ? state.scroller : scrollParentOf(block);
 		if (scroller) {
@@ -1947,7 +2066,7 @@
 			scroller.scrollTop = Math.max(0, block.getBoundingClientRect().top - scroller.getBoundingClientRect().top - scroller.clientTop + scroller.scrollTop - inset);
 		} else block.scrollIntoView({ block: "start" });
 		flashEntry(block);
-		setActive(entry.key);
+		setActive(activeKey);
 	}
 	function roundedImageBox(block) {
 		const img = block.querySelector("img");
@@ -2029,15 +2148,18 @@
 		state.root = root;
 		state.list = items;
 	}
+	var REPLY_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M8 3.5v8.4m0 0 3.3-3.3M8 11.9 4.7 8.6\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>";
 	function renderItems() {
 		ensureDom();
 		state.rows.forEach((row) => row.remove());
 		state.rows = state.entries.map((entry) => {
-			const row = document.createElement("button");
-			row.type = "button";
+			const row = document.createElement("div");
 			row.className = "dscf-msgnav-item";
 			row.classList.toggle("is-active", entry.key === state.activeKey);
 			row.dataset.key = entry.key;
+			const jump = document.createElement("button");
+			jump.type = "button";
+			jump.className = "dscf-msgnav-jump";
 			const title = document.createElement("span");
 			title.className = "dscf-msgnav-title";
 			title.textContent = entry.text || "（无正文）";
@@ -2047,8 +2169,17 @@
 			const line = document.createElement("span");
 			line.className = "dscf-msgnav-line";
 			indicator.append(line);
-			row.append(title, indicator);
-			row.addEventListener("click", () => jumpTo(entry));
+			jump.append(title, indicator);
+			jump.addEventListener("click", () => jumpTo(entry));
+			const reply = document.createElement("button");
+			reply.type = "button";
+			reply.className = "dscf-msgnav-reply";
+			reply.disabled = !entry.replyKey;
+			reply.title = entry.replyKey ? "跳到对应回答" : "还没有回答";
+			reply.setAttribute("aria-label", reply.title);
+			reply.innerHTML = REPLY_ICON;
+			if (entry.replyKey) reply.addEventListener("click", () => jumpToReply(entry));
+			row.append(jump, reply);
 			state.list.appendChild(row);
 			return row;
 		});

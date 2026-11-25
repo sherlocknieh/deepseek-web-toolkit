@@ -229,13 +229,27 @@ export function addCSSClass() {
             width: 0;
         }
 
-        /* 一项一条消息：标题靠左、横线贴右；收起时标题透明，只留横线 */
+        /* 一项一条消息：标题靠左、横线贴右；收起时标题透明，只留横线。
+           行是容器，内部两个按钮分别跳提问和回答 */
         .dscf-msgnav-item {
+            position: relative;
             display: flex;
             align-items: center;
             justify-content: flex-end;
             width: 100%;
             height: 30px;
+            color: inherit;
+            font: inherit;
+            text-align: left;
+        }
+
+        .dscf-msgnav-jump {
+            flex: 1 1 auto;
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            height: 100%;
             padding: 0;
             border: 0;
             background: transparent;
@@ -248,6 +262,8 @@ export function addCSSClass() {
         .dscf-msgnav-title {
             flex: 1 1 auto;
             min-width: 0;
+            /* 给行内右下角的「跳到回答」按钮让出位置，标题省略号不会压到图标下面 */
+            padding-right: 14px;
             margin-right: 12px;
             font-size: 13px;
             line-height: 20px;
@@ -257,6 +273,55 @@ export function addCSSClass() {
             color: var(--dscf-nav-title);
             opacity: 0;
             transition: opacity 0.1s ease, color 0.2s ease;
+        }
+
+        /* 跳到回答：叠在标题与横线之间，绝对定位保证收起时横线位置不跟着挪动 */
+        .dscf-msgnav-reply {
+            position: absolute;
+            top: 50%;
+            right: 18px;
+            transform: translateY(-50%);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+            padding: 0;
+            border: 0;
+            border-radius: 5px;
+            background: transparent;
+            color: var(--dscf-nav-title);
+            cursor: pointer;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.1s ease, color 0.2s ease, background-color 0.2s ease;
+        }
+
+        .dscf-msgnav-reply svg {
+            display: block;
+            width: 14px;
+            height: 14px;
+        }
+
+        /* 只在列表展开（悬停或键盘聚焦）时露出箭头，收起时仍只有一列横线 */
+        .dscf-msgnav:hover .dscf-msgnav-reply,
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-reply {
+            opacity: 0.55;
+            pointer-events: auto;
+        }
+
+        .dscf-msgnav-reply:hover,
+        .dscf-msgnav-reply:focus-visible {
+            opacity: 1;
+            color: var(--dscf-nav-hover);
+            background-color: rgba(103, 112, 254, 0.16);
+        }
+
+        /* 回答还没出现：保留按钮位置但不响应，避免误以为是可点的 */
+        .dscf-msgnav-reply:disabled {
+            opacity: 0 !important;
+            pointer-events: none;
+            cursor: default;
         }
 
         .dscf-msgnav:hover .dscf-msgnav-title,

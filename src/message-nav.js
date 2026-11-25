@@ -1,13 +1,14 @@
 import { runtime } from './runtime.js';
 
 // 通用消息导航：复刻 DeepSeek 原生导航——右侧一颗胶囊收成一列横线，悬停展开提问列表，
-// 点击跳到对应提问。所有站点（含 DeepSeek）都用这一套，DeepSeek 的原生导航由样式隐藏；
-// 实现只依赖 DOM，不碰站点内部实例。
+// 点击条目跳到对应提问，条目上的箭头按钮跳到紧随其后的回答。所有站点（含 DeepSeek）
+// 都用这一套，DeepSeek 的原生导航由样式隐藏；实现只依赖 DOM，不碰站点内部实例。
 //
 // 识别规则：
 //   消息块 —— 按站点各自的结构取；没有适配的站点才退回通用语义标记
 //   滚动容器 —— 同时包含多条消息、内容最高的可滚动区块
-//   角色 —— 优先读站点标记，读不到时按提问/回答交替推断；只把提问放进导航
+//   角色 —— 优先读站点标记，读不到时按提问/回答交替推断；只把提问放进导航，
+//           每条提问再记下紧随其后那条回答的序号，供条目上的箭头按钮跳转
 
 // 有一条提问就出导航：DeepSeek 原生导航同样单条提问即常显，这里保持一致
 const NAV_ATTR = 'data-dscf-msgnav';
@@ -62,8 +63,56 @@ const SITE_ADAPTERS = [
         bubble: el => Array.from(el.querySelectorAll('.ds-message > div'))
             .find(node => (node.innerText || '').trim()),
         scroller: '.ds-scroll-area'
+    },
+    {
+        hosts: ['sichang.xyz'],
+        // 用户气泡正文是 .chat-message-copy，回答渲染进 .chat-message-markdown；
+        // 两个都是站点自己的语义类名，比外层那串 Tailwind 组合类稳定
+        selector: '.chat-message-markdown, .chat-message-copy',
+        // 角色以气泡底色为准：回答是 bg-bubble-assistant，用户是 bg-bubble-user；
+        // 短回答万一也走 .chat-message-copy，光看类名会认错
+        role: el => {
+            if (el.closest('[class*="bg-bubble-assistant"]')) return 'ASSISTANT';
+            if (el.closest('[class*="bg-bubble-user"]')) return 'USER';
+            return el.classList.contains('chat-message-markdown') ? 'ASSISTANT' : 'USER';
+        },
+        content: el => el,
+        // 光晕贴气泡：用户是 bg-bubble-user，回答是 bg-bubble-assistant/90，按前缀统一找
+        bubble: el => el.closest('[class*="bg-bubble-"]'),
+        scroller: '[data-slot="scroll-area-viewport"]'
+    },
+    {
+        hosts: ['venice.ai'],
+        // 两种聊天页结构不同，一次收全：
+        // agentic 页每条消息是 [role=group]（用户）或 .assistant（回答）；
+        // 经典聊天页每条消息是 [data-message-id]，回答里嵌 .assistant
+        selector: '.minds-chat-scroll-root [role="group"], .minds-chat-scroll-root .assistant, [data-message-id]',
+        role: el => {
+            if (el.matches('.assistant') || el.querySelector('.assistant')) return 'ASSISTANT';
+            const box = el.querySelector('[data-message-content]');
+            return box && box.getAttribute('data-role') === 'assistant' ? 'ASSISTANT' : 'USER';
+        },
+        content: el => el.querySelector('.assistant')
+            || el.querySelector('[data-testid="user-message"]')
+            || el.querySelector('[data-message-content="true"]')
+            || el.querySelector('.assistant-content')
+            || el,
+        bubble: el => el.querySelector('.assistant')
+            || el.querySelector('[data-testid="user-message"]')
+            || el.querySelector('.assistant-content'),
+        // 经典聊天的滚动容器是个只带内联样式的 div，没有类名，只能按最近的滚动祖先找
+        scroller: scrollableAncestor
     }
 ];
+
+// 最近的滚动祖先：站点没给稳定类名时用它兜底；不要求已经溢出，
+// 短会话也要认下容器，导航才能挂上去
+function scrollableAncestor(el) {
+    for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) {
+        if (/(auto|scroll)/.test(getComputedStyle(node).overflowY)) return node;
+    }
+    return null;
+}
 
 // 未适配站点按常见语义标记兜底；去掉嵌套命中由 dropNested 负责
 const FALLBACK_SELECTOR = [
@@ -145,13 +194,19 @@ function getMessageBlocks() {
     return dropNested(blocks);
 }
 
+// 站点声明的滚动容器：可以是选择器，也可以是按消息块现算的函数
+function hintScroller(block) {
+    if (!ADAPTER || !ADAPTER.scroller) return null;
+    return typeof ADAPTER.scroller === 'function'
+        ? ADAPTER.scroller(block)
+        : block.closest(ADAPTER.scroller);
+}
+
 // 滚动容器：优先用站点给定的容器，找不到再从消息块往上找同时装有多条消息、内容最高的可滚动区块
 function resolveScroller(blocks) {
-    if (ADAPTER && ADAPTER.scroller) {
-        const hinted = blocks[0].closest(ADAPTER.scroller);
-        // 短会话内容可能尚未溢出，但仍需要用站点指定的容器承载导航和后续消息变化。
-        if (hinted) return hinted;
-    }
+    const hinted = hintScroller(blocks[0]);
+    // 短会话内容可能尚未溢出，但仍需要用站点指定的容器承载导航和后续消息变化
+    if (hinted) return hinted;
 
     let best = null;
     let bestHeight = 0;
@@ -181,20 +236,35 @@ function resolveScroller(blocks) {
         .sort((a, b) => b.scrollHeight - a.scrollHeight)[0] || null;
 }
 
-// 消息条目：只列用户提问，回答不进导航；key 用消息块序号，站内 DOM 被重建后仍能重新定位
+// 消息条目：只列用户提问，回答不进导航；key 用消息块序号，站内 DOM 被重建后仍能重新定位。
+// 每条提问顺带记住紧随其后的回答块（序号 + 元素）：回答可能晚于提问出现，签名里带上它，
+// 回答一渲染出来旧条目就会重画，箭头按钮随之启用
 function readEntries() {
-    return getMessageBlocks()
-        .map((el, index) => ({
-            key: String(index),
-            el,
-            role: detectRole(el, index),
-            text: readText(el)
-        }))
-        .filter(isUserEntry);
+    const blocks = getMessageBlocks().map((el, index) => ({
+        key: String(index),
+        el,
+        role: detectRole(el, index),
+        text: readText(el)
+    }));
+
+    return blocks
+        .map((entry, index) => {
+            if (!isUserEntry(entry)) return null;
+            const next = blocks[index + 1];
+            const reply = next && next.role === 'ASSISTANT' ? next : null;
+            return {
+                ...entry,
+                replyKey: reply ? reply.key : null,
+                replyEl: reply ? reply.el : null
+            };
+        })
+        .filter(Boolean);
 }
 
 function makeSignature(entries) {
-    return entries.map(entry => entry.key + ':' + entry.text.slice(0, 12)).join('|');
+    return entries
+        .map(entry => entry.key + ':' + (entry.replyKey || '-') + ':' + entry.text.slice(0, 12))
+        .join('|');
 }
 
 function isUserEntry(entry) {
@@ -202,8 +272,12 @@ function isUserEntry(entry) {
 }
 
 function findBlock(entry) {
-    if (entry.el && entry.el.isConnected) return entry.el;
-    return getMessageBlocks()[Number(entry.key)] || null;
+    return findBlockByKey(entry.key, entry.el);
+}
+
+function findBlockByKey(key, el) {
+    if (el && el.isConnected) return el;
+    return getMessageBlocks()[Number(key)] || null;
 }
 
 // 跳转落点比悬浮标题再低一点：气泡边缘的光晕向外扩 16px，留出的距离要盖住这段，
@@ -231,7 +305,17 @@ function scrollParentOf(el) {
 // 跳到目标消息：直接改滚动容器的 scrollTop。停在底部时站点（Grok 已确认）会把平滑滚动
 // 逐帧拉回底部，动画整段被吞掉，所以这里不做过渡动画；容器关系不明时才退回 scrollIntoView
 function jumpTo(entry) {
-    const block = findBlock(entry);
+    jumpToKey(entry.key, entry.el, entry.key);
+}
+
+// 跳到对应回答：高亮仍落在提问条目上，导航表示的是「当前读到哪一问」
+function jumpToReply(entry) {
+    if (!entry.replyKey) return;
+    jumpToKey(entry.replyKey, entry.replyEl, entry.key);
+}
+
+function jumpToKey(key, el, activeKey) {
+    const block = findBlockByKey(key, el);
     if (!block) return;
 
     const scroller = state.scroller && state.scroller.contains(block)
@@ -248,7 +332,7 @@ function jumpTo(entry) {
     }
 
     flashEntry(block);
-    setActive(entry.key);
+    setActive(activeKey);
 }
 
 // 无正文时把光晕落到包住图片、自己带圆角的那层容器上，否则方框会盖住图片的圆角
@@ -366,16 +450,25 @@ function ensureDom() {
     state.list = items;
 }
 
+// 跳到回答的箭头图标：内联 SVG，不依赖 Font Awesome（其他站点不加载图标字体）
+const REPLY_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">'
+    + '<path d="M8 3.5v8.4m0 0 3.3-3.3M8 11.9 4.7 8.6" fill="none" stroke="currentColor"'
+    + ' stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
 function renderItems() {
     ensureDom();
 
     state.rows.forEach(row => row.remove());
     state.rows = state.entries.map(entry => {
-        const row = document.createElement('button');
-        row.type = 'button';
+        // 行本身是容器：一个按钮跳提问，另一个按钮跳回答，按钮不能互相嵌套
+        const row = document.createElement('div');
         row.className = 'dscf-msgnav-item';
         row.classList.toggle('is-active', entry.key === state.activeKey);
         row.dataset.key = entry.key;
+
+        const jump = document.createElement('button');
+        jump.type = 'button';
+        jump.className = 'dscf-msgnav-jump';
 
         const title = document.createElement('span');
         title.className = 'dscf-msgnav-title';
@@ -388,8 +481,19 @@ function renderItems() {
         line.className = 'dscf-msgnav-line';
         indicator.append(line);
 
-        row.append(title, indicator);
-        row.addEventListener('click', () => jumpTo(entry));
+        jump.append(title, indicator);
+        jump.addEventListener('click', () => jumpTo(entry));
+
+        const reply = document.createElement('button');
+        reply.type = 'button';
+        reply.className = 'dscf-msgnav-reply';
+        reply.disabled = !entry.replyKey;
+        reply.title = entry.replyKey ? '跳到对应回答' : '还没有回答';
+        reply.setAttribute('aria-label', reply.title);
+        reply.innerHTML = REPLY_ICON;
+        if (entry.replyKey) reply.addEventListener('click', () => jumpToReply(entry));
+
+        row.append(jump, reply);
         state.list.appendChild(row);
         return row;
     });
