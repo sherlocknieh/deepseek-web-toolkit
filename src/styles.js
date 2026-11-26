@@ -230,7 +230,7 @@ export function addCSSClass() {
         }
 
         /* 一项一条消息：预览文字靠左、图标和横线靠右；收起时文字和图标透明，只留横线。
-           行是容器，文字右侧两个按钮分别预览提问/回答，左侧正文区跳当前预览 */
+           行是容器，正文区点击切换提问/回答，右侧两个按钮分别预览提问/回答 */
         .dscf-msgnav-item {
             position: relative;
             display: flex;

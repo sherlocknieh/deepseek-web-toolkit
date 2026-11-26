@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 修复+优化
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.26.1718
+// @version      2026.11.26.1723
 // @author       sherlocknieh
 // @description  优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。
 // @license      MIT
@@ -315,7 +315,7 @@
         }
 
         /* 一项一条消息：预览文字靠左、图标和横线靠右；收起时文字和图标透明，只留横线。
-           行是容器，文字右侧两个按钮分别预览提问/回答，左侧正文区跳当前预览 */
+           行是容器，正文区点击切换提问/回答，右侧两个按钮分别预览提问/回答 */
         .dscf-msgnav-item {
             position: relative;
             display: flex;
@@ -2223,6 +2223,9 @@
 		const text = showingAnswer ? entry.replyText : entry.text;
 		return (showingAnswer ? "跳到回答：" : "跳到提问：") + (text || "（无正文）");
 	}
+	function jumpActionLabel(entry, showingAnswer) {
+		return previewLabel(entry, entry.replyKey ? !showingAnswer : false);
+	}
 	function applyAnswerPreview(entry, showingAnswer) {
 		const row = state.rows.find((item) => item.dataset.key === entry.key);
 		if (!row) return;
@@ -2231,7 +2234,7 @@
 		const answerRole = row.querySelector(".dscf-msgnav-role-answer");
 		questionRole?.setAttribute("aria-pressed", String(!showingAnswer));
 		answerRole?.setAttribute("aria-pressed", String(showingAnswer));
-		row.querySelector(".dscf-msgnav-jump")?.setAttribute("aria-label", previewLabel(entry, showingAnswer));
+		row.querySelector(".dscf-msgnav-jump")?.setAttribute("aria-label", jumpActionLabel(entry, showingAnswer));
 	}
 	function switchPreview(entry, showingAnswer) {
 		if (showingAnswer && !entry.replyKey) return;
@@ -2254,7 +2257,7 @@
 			const jump = document.createElement("button");
 			jump.type = "button";
 			jump.className = "dscf-msgnav-jump";
-			jump.setAttribute("aria-label", previewLabel(entry, showingAnswer));
+			jump.setAttribute("aria-label", jumpActionLabel(entry, showingAnswer));
 			const preview = document.createElement("span");
 			preview.className = "dscf-msgnav-preview";
 			const question = document.createElement("span");
@@ -2273,7 +2276,7 @@
 			indicator.append(line);
 			jump.append(preview);
 			jump.addEventListener("click", () => {
-				if (isShowingAnswer(entry)) jumpToReply(entry);
+				if (entry.replyKey) switchPreview(entry, !isShowingAnswer(entry));
 				else jumpTo(entry);
 			});
 			const roles = document.createElement("span");
@@ -2317,7 +2320,7 @@
 				answer.title = entry.replyText || "";
 			}
 			const jump = row.querySelector(".dscf-msgnav-jump");
-			if (jump) jump.setAttribute("aria-label", previewLabel(entry, row.classList.contains("is-showing-answer")));
+			if (jump) jump.setAttribute("aria-label", jumpActionLabel(entry, row.classList.contains("is-showing-answer")));
 		});
 	}
 	function syncVisibility() {

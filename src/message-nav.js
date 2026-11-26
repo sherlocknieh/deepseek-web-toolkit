@@ -1,8 +1,8 @@
 import { runtime } from './runtime.js';
 
 // 通用消息导航：复刻 DeepSeek 原生导航——右侧一颗胶囊收成一列横线，悬停展开提问列表，
-// 点击条目跳到当前预览的消息；条目文字右侧固定并排提问/回答两个图标按钮，点哪一侧就切到
-// 哪一侧预览并跳过去，两个按钮的位置不随切换互换。所有站点（含 DeepSeek）都用这一套，
+// 点击条目正文在提问/回答预览之间切换并跳到对应消息；条目文字右侧固定并排提问/回答
+// 两个图标按钮，点哪一侧就切到哪一侧预览并跳过去，两个按钮的位置不随切换互换。所有站点（含 DeepSeek）都用这一套，
 // DeepSeek 的原生导航由样式隐藏；实现只依赖 DOM，不碰站点内部实例。
 //
 // 识别规则：
@@ -546,6 +546,11 @@ function previewLabel(entry, showingAnswer) {
     return (showingAnswer ? '跳到回答：' : '跳到提问：') + (text || '（无正文）');
 }
 
+// 正文区点击在提问/回答之间切换：无障碍文案标的是下一侧；回答未出现时只能跳回提问
+function jumpActionLabel(entry, showingAnswer) {
+    return previewLabel(entry, entry.replyKey ? !showingAnswer : false);
+}
+
 // 模式切换只更新这一行，不整列重画；文字宽度由样式里的 flex-grow 过渡完成收缩/展开
 function applyAnswerPreview(entry, showingAnswer) {
     const row = state.rows.find(item => item.dataset.key === entry.key);
@@ -560,7 +565,7 @@ function applyAnswerPreview(entry, showingAnswer) {
     answerRole?.setAttribute('aria-pressed', String(showingAnswer));
 
     const jump = row.querySelector('.dscf-msgnav-jump');
-    jump?.setAttribute('aria-label', previewLabel(entry, showingAnswer));
+    jump?.setAttribute('aria-label', jumpActionLabel(entry, showingAnswer));
 }
 
 // 点提问/回答按钮：切到该侧预览并跳到对应消息；回答还没出现时答按钮不可用
@@ -587,7 +592,7 @@ function renderItems() {
     state.rows = state.entries.map(entry => {
         const showingAnswer = isShowingAnswer(entry);
 
-        // 行本身是容器：正文区点击跳当前预览，右侧并排提问/回答两个按钮，按钮不能互相嵌套
+        // 行本身是容器：正文区点击切换提问/回答预览，右侧并排提问/回答两个按钮，按钮不能互相嵌套
         const row = document.createElement('div');
         row.className = 'dscf-msgnav-item';
         row.classList.toggle('is-active', entry.key === state.activeKey);
@@ -597,7 +602,7 @@ function renderItems() {
         const jump = document.createElement('button');
         jump.type = 'button';
         jump.className = 'dscf-msgnav-jump';
-        jump.setAttribute('aria-label', previewLabel(entry, showingAnswer));
+        jump.setAttribute('aria-label', jumpActionLabel(entry, showingAnswer));
 
         const preview = document.createElement('span');
         preview.className = 'dscf-msgnav-preview';
@@ -622,8 +627,9 @@ function renderItems() {
 
         jump.append(preview);
         jump.addEventListener('click', () => {
-            if (isShowingAnswer(entry)) {
-                jumpToReply(entry);
+            // 文字区与右侧按钮一致：在提问/回答之间切换；回答未出现时只跳回提问
+            if (entry.replyKey) {
+                switchPreview(entry, !isShowingAnswer(entry));
             } else {
                 jumpTo(entry);
             }
@@ -680,7 +686,7 @@ function syncEntryTexts() {
 
         const jump = row.querySelector('.dscf-msgnav-jump');
         if (jump) {
-            jump.setAttribute('aria-label', previewLabel(entry, row.classList.contains('is-showing-answer')));
+            jump.setAttribute('aria-label', jumpActionLabel(entry, row.classList.contains('is-showing-answer')));
         }
     });
 }
