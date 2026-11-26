@@ -299,20 +299,19 @@ function findBlockByKey(key, el) {
     return getMessageBlocks()[Number(key)] || null;
 }
 
-// 跳转落点比悬浮标题再低一点：气泡边缘的光晕向外扩 16px，留出的距离要盖住这段，
-// 否则气泡虽然完整，光晕的上半圈会被滚动区顶端裁成一条直线
-const JUMP_GAP = 20;
+// 当前读到哪一条的基准线：内容区顶端的留白之外再下移一点，首条消息恰好压线时高亮不会来回跳
+const ACTIVE_LINE_OFFSET = 20;
 
 // 翻页、方向键、空格、Home/End 说明用户在键盘滚动；其余按键（打字、快捷键）不算
 const SCROLL_KEYS = /^(PageUp|PageDown|ArrowUp|ArrowDown|ArrowLeft|ArrowRight|Home|End| |Spacebar)$/;
 
 // 站点可能在消息区顶部给悬浮标题留出高度（Grok 的滚动区从视口顶开始、首条消息往下让 128px）：
-// 这段留白就是首条消息距滚动原点的距离，跳转时让出来，目标才不会压在悬浮标题下面
+// 这段留白就是首条消息距滚动原点的距离，高亮基准线要跟着下移，否则消息一进内容区就算作当前
 function readTopInset(scroller, blocks) {
-    if (!blocks.length) return JUMP_GAP;
+    if (!blocks.length) return ACTIVE_LINE_OFFSET;
     const inset = blocks[0].getBoundingClientRect().top
         - scroller.getBoundingClientRect().top + scroller.scrollTop;
-    return (inset > 0 && inset < 200 ? inset : 0) + JUMP_GAP;
+    return (inset > 0 && inset < 200 ? inset : 0) + ACTIVE_LINE_OFFSET;
 }
 
 // 取元素自己的滚动父级：站点可能把滚动交给内层元素，state.scroller 未必包住目标
@@ -341,8 +340,8 @@ function jumpToKey(key, el, activeKey, reply = false) {
     const block = findBlockByKey(key, el);
     if (!block) return;
 
-    // 回答块顶端往往排着思考栏，对齐它看到的是思考而不是正文；
-    // 站点给了正文锚点就落到锚点，没有锚点的站点仍按整块对齐
+    // 回答块顶端往往排着思考栏，从它开始滚看到的是思考而不是正文；
+    // 站点给了正文锚点就从锚点开始，没有锚点的站点仍按整块落点
     const target = (reply && ADAPTER && ADAPTER.replyAnchor ? ADAPTER.replyAnchor(block) : null) || block;
 
     const scroller = state.scroller && state.scroller.contains(target)
@@ -353,18 +352,19 @@ function jumpToKey(key, el, activeKey, reply = false) {
     // 先锁住这次跳转的条目，等用户自己滚动再交还给位置判定
     lockActiveOnJump();
 
+    const view = scroller ? scroller.clientHeight : window.innerHeight;
+    // 整块放得进可视区就整块居中；比可视区还高时按上边缘居中，正文开头停在正中、上方留出上一问的尾巴
+    const inset = height < view ? (view - height) / 2 : view / 2;
+
     if (scroller) {
         const top = target.getBoundingClientRect().top
             - scroller.getBoundingClientRect().top - scroller.clientTop + scroller.scrollTop;
-        // 条目比可视区还高时居中会把开头切到上方，仍按顶部对齐；
-        // 换用兜底容器时 topInset 得按它自己的留白重算，直接沿用别的容器会偏出到头
-        const inset = height < scroller.clientHeight
-            ? (scroller.clientHeight - height) / 2
-            : (scroller === state.scroller ? state.topInset : readTopInset(scroller, [target]));
         const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
         scroller.scrollTop = Math.min(Math.max(0, top - inset), max);
     } else {
-        target.scrollIntoView({ block: height < window.innerHeight ? 'center' : 'start' });
+        // 找不到滚动父级时只能借助浏览器：先对齐顶端，再把页面往上带一段，等效于居中
+        target.scrollIntoView({ block: 'start' });
+        window.scrollBy(0, -inset);
     }
 
     // 落到正文锚点时按锚点本身画光晕：整块气泡的顶端已经在视口外，圈出来也看不见

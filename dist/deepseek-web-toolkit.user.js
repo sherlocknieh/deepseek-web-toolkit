@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 修复+优化
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.26.1649
+// @version      2026.11.26.1700
 // @author       sherlocknieh
 // @description  优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。
 // @license      MIT
@@ -2091,12 +2091,12 @@
 		if (el && el.isConnected) return el;
 		return getMessageBlocks()[Number(key)] || null;
 	}
-	var JUMP_GAP = 20;
+	var ACTIVE_LINE_OFFSET = 20;
 	var SCROLL_KEYS = /^(PageUp|PageDown|ArrowUp|ArrowDown|ArrowLeft|ArrowRight|Home|End| |Spacebar)$/;
 	function readTopInset(scroller, blocks) {
-		if (!blocks.length) return JUMP_GAP;
+		if (!blocks.length) return ACTIVE_LINE_OFFSET;
 		const inset = blocks[0].getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
-		return (inset > 0 && inset < 200 ? inset : 0) + JUMP_GAP;
+		return (inset > 0 && inset < 200 ? inset : 0) + ACTIVE_LINE_OFFSET;
 	}
 	function scrollParentOf(el) {
 		for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) {
@@ -2119,12 +2119,16 @@
 		const scroller = state.scroller && state.scroller.contains(target) ? state.scroller : scrollParentOf(target);
 		const height = target.getBoundingClientRect().height;
 		lockActiveOnJump();
+		const view = scroller ? scroller.clientHeight : window.innerHeight;
+		const inset = height < view ? (view - height) / 2 : view / 2;
 		if (scroller) {
 			const top = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top - scroller.clientTop + scroller.scrollTop;
-			const inset = height < scroller.clientHeight ? (scroller.clientHeight - height) / 2 : scroller === state.scroller ? state.topInset : readTopInset(scroller, [target]);
 			const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
 			scroller.scrollTop = Math.min(Math.max(0, top - inset), max);
-		} else target.scrollIntoView({ block: height < window.innerHeight ? "center" : "start" });
+		} else {
+			target.scrollIntoView({ block: "start" });
+			window.scrollBy(0, -inset);
+		}
 		flashEntry(target, target !== block);
 		setActive(activeKey);
 	}
