@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 修复+优化
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.26.1700
+// @version      2026.11.26.1718
 // @author       sherlocknieh
 // @description  优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。
 // @license      MIT
@@ -314,8 +314,8 @@
             width: 0;
         }
 
-        /* 一项一条消息：图标和预览文字靠左、横线贴右；收起时文字和图标透明，只留横线。
-           行是容器，内部两个按钮分别跳当前预览、切换提问/回答预览 */
+        /* 一项一条消息：预览文字靠左、图标和横线靠右；收起时文字和图标透明，只留横线。
+           行是容器，文字右侧两个按钮分别预览提问/回答，左侧正文区跳当前预览 */
         .dscf-msgnav-item {
             position: relative;
             display: flex;
@@ -344,7 +344,16 @@
             cursor: pointer;
         }
 
-        /* 当前预览侧的图标：提问为圆圈问号，回答为带正文线的气泡 */
+        /* 文字右侧并排的提问/回答按钮：提问在左、回答紧挨着它；收起时随文字一起透明，
+           只留横线。当前预览哪一侧由亮度区分，两个按钮的位置永远不换 */
+        .dscf-msgnav-roles {
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            margin-right: 6px;
+        }
+
         .dscf-msgnav-role {
             flex: 0 0 16px;
             display: inline-flex;
@@ -352,10 +361,14 @@
             justify-content: center;
             width: 16px;
             height: 16px;
-            margin-right: 6px;
+            padding: 0;
+            border: 0;
+            border-radius: 4px;
+            background: transparent;
             color: var(--dscf-nav-title);
+            cursor: pointer;
             opacity: 0;
-            transition: opacity 0.1s ease, color 0.2s ease;
+            transition: opacity 0.1s ease, color 0.2s ease, background-color 0.2s ease;
         }
 
         .dscf-msgnav-role svg {
@@ -372,8 +385,6 @@
             display: flex;
             align-items: center;
             margin-right: 12px;
-            /* 给右侧的切换按钮让位，省略号不会压到图标下面 */
-            padding-right: 14px;
             overflow: hidden;
         }
 
@@ -399,59 +410,29 @@
             opacity: 1;
         }
 
+        /* 展开时两个按钮一起露面：当前预览侧全亮，另一侧只留一半亮度作提示 */
         .dscf-msgnav:hover .dscf-msgnav-role,
         .dscf-msgnav:has(:focus-visible) .dscf-msgnav-role {
+            opacity: 0.45;
+        }
+
+        .dscf-msgnav:hover .dscf-msgnav-item:not(.is-showing-answer) .dscf-msgnav-role-question,
+        .dscf-msgnav:hover .dscf-msgnav-item.is-showing-answer .dscf-msgnav-role-answer,
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-item:not(.is-showing-answer) .dscf-msgnav-role-question,
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-item.is-showing-answer .dscf-msgnav-role-answer {
             opacity: 1;
         }
 
-        /* 切换预览：叠在文字与横线之间，绝对定位保证收起时横线位置不跟着挪动；
-           提问模式下显示回答图标，回答模式下显示提问图标 */
-        .dscf-msgnav-toggle {
-            position: absolute;
-            top: 50%;
-            right: 18px;
-            transform: translateY(-50%);
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 20px;
-            height: 20px;
-            padding: 0;
-            border: 0;
-            border-radius: 5px;
-            background: transparent;
-            color: var(--dscf-nav-title);
-            cursor: pointer;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.1s ease, color 0.2s ease, background-color 0.2s ease;
-        }
-
-        .dscf-msgnav-toggle svg {
-            display: block;
-            width: 14px;
-            height: 14px;
-        }
-
-        /* 只在列表展开（悬停或键盘聚焦）时露出切换按钮，收起时仍只有一列横线 */
-        .dscf-msgnav:hover .dscf-msgnav-toggle,
-        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-toggle {
-            opacity: 0.55;
-            pointer-events: auto;
-        }
-
-        .dscf-msgnav-toggle:hover,
-        .dscf-msgnav-toggle:focus-visible {
+        .dscf-msgnav:hover .dscf-msgnav-role:hover,
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-role:focus-visible {
             opacity: 1;
             color: var(--dscf-nav-hover);
             background-color: rgba(103, 112, 254, 0.16);
         }
 
-        /* 回答还没出现：保留按钮位置但不响应，避免误以为是可点的 */
-        .dscf-msgnav-toggle:disabled {
-            opacity: 0 !important;
-            pointer-events: none;
-            cursor: default;
+        /* 回答还没出现：答按钮不占位，问按钮旁边只留它自己 */
+        .dscf-msgnav-role:disabled {
+            display: none;
         }
 
         /* 横线的定位盒固定 16×20，横线本身 8×2；当前项放大 1.5 倍并变成品牌色 */
@@ -492,7 +473,9 @@
             font-weight: 500;
         }
 
-        .dscf-msgnav-item.is-active .dscf-msgnav-role {
+        /* 当前条目上，只有正在预览的一侧图标跟随品牌色 */
+        .dscf-msgnav-item.is-active:not(.is-showing-answer) .dscf-msgnav-role-question,
+        .dscf-msgnav-item.is-active.is-showing-answer .dscf-msgnav-role-answer {
             color: var(--dscf-nav-active);
         }
 
@@ -2244,19 +2227,14 @@
 		const row = state.rows.find((item) => item.dataset.key === entry.key);
 		if (!row) return;
 		row.classList.toggle("is-showing-answer", showingAnswer);
-		const role = row.querySelector(".dscf-msgnav-role");
-		if (role) role.innerHTML = showingAnswer ? ANSWER_ICON : QUESTION_ICON;
-		const toggle = row.querySelector(".dscf-msgnav-toggle");
-		if (toggle && !toggle.disabled) {
-			toggle.innerHTML = showingAnswer ? QUESTION_ICON : ANSWER_ICON;
-			toggle.title = showingAnswer ? "返回提问预览" : "展开回答预览";
-			toggle.setAttribute("aria-label", toggle.title);
-		}
+		const questionRole = row.querySelector(".dscf-msgnav-role-question");
+		const answerRole = row.querySelector(".dscf-msgnav-role-answer");
+		questionRole?.setAttribute("aria-pressed", String(!showingAnswer));
+		answerRole?.setAttribute("aria-pressed", String(showingAnswer));
 		row.querySelector(".dscf-msgnav-jump")?.setAttribute("aria-label", previewLabel(entry, showingAnswer));
 	}
-	function toggleAnswerPreview(entry) {
-		if (!entry.replyKey) return;
-		const showingAnswer = !state.answerPreview.has(entry.key);
+	function switchPreview(entry, showingAnswer) {
+		if (showingAnswer && !entry.replyKey) return;
 		if (showingAnswer) state.answerPreview.add(entry.key);
 		else state.answerPreview.delete(entry.key);
 		applyAnswerPreview(entry, showingAnswer);
@@ -2277,9 +2255,6 @@
 			jump.type = "button";
 			jump.className = "dscf-msgnav-jump";
 			jump.setAttribute("aria-label", previewLabel(entry, showingAnswer));
-			const role = document.createElement("span");
-			role.className = "dscf-msgnav-role";
-			role.innerHTML = showingAnswer ? ANSWER_ICON : QUESTION_ICON;
 			const preview = document.createElement("span");
 			preview.className = "dscf-msgnav-preview";
 			const question = document.createElement("span");
@@ -2296,20 +2271,32 @@
 			const line = document.createElement("span");
 			line.className = "dscf-msgnav-line";
 			indicator.append(line);
-			jump.append(role, preview, indicator);
+			jump.append(preview);
 			jump.addEventListener("click", () => {
 				if (isShowingAnswer(entry)) jumpToReply(entry);
 				else jumpTo(entry);
 			});
-			const toggle = document.createElement("button");
-			toggle.type = "button";
-			toggle.className = "dscf-msgnav-toggle";
-			toggle.disabled = !entry.replyKey;
-			toggle.title = showingAnswer ? "返回提问预览" : entry.replyKey ? "展开回答预览" : "还没有回答";
-			toggle.setAttribute("aria-label", toggle.title);
-			toggle.innerHTML = showingAnswer ? QUESTION_ICON : ANSWER_ICON;
-			if (entry.replyKey) toggle.addEventListener("click", () => toggleAnswerPreview(entry));
-			row.append(jump, toggle);
+			const roles = document.createElement("span");
+			roles.className = "dscf-msgnav-roles";
+			const questionRole = document.createElement("button");
+			questionRole.type = "button";
+			questionRole.className = "dscf-msgnav-role dscf-msgnav-role-question";
+			questionRole.title = "查看提问预览";
+			questionRole.setAttribute("aria-label", questionRole.title);
+			questionRole.setAttribute("aria-pressed", String(!showingAnswer));
+			questionRole.innerHTML = QUESTION_ICON;
+			questionRole.addEventListener("click", () => switchPreview(entry, false));
+			const answerRole = document.createElement("button");
+			answerRole.type = "button";
+			answerRole.className = "dscf-msgnav-role dscf-msgnav-role-answer";
+			answerRole.disabled = !entry.replyKey;
+			answerRole.title = entry.replyKey ? "查看回答预览" : "还没有回答";
+			answerRole.setAttribute("aria-label", answerRole.title);
+			answerRole.setAttribute("aria-pressed", String(showingAnswer));
+			answerRole.innerHTML = ANSWER_ICON;
+			if (entry.replyKey) answerRole.addEventListener("click", () => switchPreview(entry, true));
+			roles.append(questionRole, answerRole);
+			row.append(jump, roles, indicator);
 			state.list.appendChild(row);
 			return row;
 		});

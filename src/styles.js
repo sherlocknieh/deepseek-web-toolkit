@@ -229,8 +229,8 @@ export function addCSSClass() {
             width: 0;
         }
 
-        /* 一项一条消息：图标和预览文字靠左、横线贴右；收起时文字和图标透明，只留横线。
-           行是容器，内部两个按钮分别跳当前预览、切换提问/回答预览 */
+        /* 一项一条消息：预览文字靠左、图标和横线靠右；收起时文字和图标透明，只留横线。
+           行是容器，文字右侧两个按钮分别预览提问/回答，左侧正文区跳当前预览 */
         .dscf-msgnav-item {
             position: relative;
             display: flex;
@@ -259,7 +259,16 @@ export function addCSSClass() {
             cursor: pointer;
         }
 
-        /* 当前预览侧的图标：提问为圆圈问号，回答为带正文线的气泡 */
+        /* 文字右侧并排的提问/回答按钮：提问在左、回答紧挨着它；收起时随文字一起透明，
+           只留横线。当前预览哪一侧由亮度区分，两个按钮的位置永远不换 */
+        .dscf-msgnav-roles {
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            margin-right: 6px;
+        }
+
         .dscf-msgnav-role {
             flex: 0 0 16px;
             display: inline-flex;
@@ -267,10 +276,14 @@ export function addCSSClass() {
             justify-content: center;
             width: 16px;
             height: 16px;
-            margin-right: 6px;
+            padding: 0;
+            border: 0;
+            border-radius: 4px;
+            background: transparent;
             color: var(--dscf-nav-title);
+            cursor: pointer;
             opacity: 0;
-            transition: opacity 0.1s ease, color 0.2s ease;
+            transition: opacity 0.1s ease, color 0.2s ease, background-color 0.2s ease;
         }
 
         .dscf-msgnav-role svg {
@@ -287,8 +300,6 @@ export function addCSSClass() {
             display: flex;
             align-items: center;
             margin-right: 12px;
-            /* 给右侧的切换按钮让位，省略号不会压到图标下面 */
-            padding-right: 14px;
             overflow: hidden;
         }
 
@@ -314,59 +325,29 @@ export function addCSSClass() {
             opacity: 1;
         }
 
+        /* 展开时两个按钮一起露面：当前预览侧全亮，另一侧只留一半亮度作提示 */
         .dscf-msgnav:hover .dscf-msgnav-role,
         .dscf-msgnav:has(:focus-visible) .dscf-msgnav-role {
+            opacity: 0.45;
+        }
+
+        .dscf-msgnav:hover .dscf-msgnav-item:not(.is-showing-answer) .dscf-msgnav-role-question,
+        .dscf-msgnav:hover .dscf-msgnav-item.is-showing-answer .dscf-msgnav-role-answer,
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-item:not(.is-showing-answer) .dscf-msgnav-role-question,
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-item.is-showing-answer .dscf-msgnav-role-answer {
             opacity: 1;
         }
 
-        /* 切换预览：叠在文字与横线之间，绝对定位保证收起时横线位置不跟着挪动；
-           提问模式下显示回答图标，回答模式下显示提问图标 */
-        .dscf-msgnav-toggle {
-            position: absolute;
-            top: 50%;
-            right: 18px;
-            transform: translateY(-50%);
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 20px;
-            height: 20px;
-            padding: 0;
-            border: 0;
-            border-radius: 5px;
-            background: transparent;
-            color: var(--dscf-nav-title);
-            cursor: pointer;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.1s ease, color 0.2s ease, background-color 0.2s ease;
-        }
-
-        .dscf-msgnav-toggle svg {
-            display: block;
-            width: 14px;
-            height: 14px;
-        }
-
-        /* 只在列表展开（悬停或键盘聚焦）时露出切换按钮，收起时仍只有一列横线 */
-        .dscf-msgnav:hover .dscf-msgnav-toggle,
-        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-toggle {
-            opacity: 0.55;
-            pointer-events: auto;
-        }
-
-        .dscf-msgnav-toggle:hover,
-        .dscf-msgnav-toggle:focus-visible {
+        .dscf-msgnav:hover .dscf-msgnav-role:hover,
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-role:focus-visible {
             opacity: 1;
             color: var(--dscf-nav-hover);
             background-color: rgba(103, 112, 254, 0.16);
         }
 
-        /* 回答还没出现：保留按钮位置但不响应，避免误以为是可点的 */
-        .dscf-msgnav-toggle:disabled {
-            opacity: 0 !important;
-            pointer-events: none;
-            cursor: default;
+        /* 回答还没出现：答按钮不占位，问按钮旁边只留它自己 */
+        .dscf-msgnav-role:disabled {
+            display: none;
         }
 
         /* 横线的定位盒固定 16×20，横线本身 8×2；当前项放大 1.5 倍并变成品牌色 */
@@ -407,7 +388,9 @@ export function addCSSClass() {
             font-weight: 500;
         }
 
-        .dscf-msgnav-item.is-active .dscf-msgnav-role {
+        /* 当前条目上，只有正在预览的一侧图标跟随品牌色 */
+        .dscf-msgnav-item.is-active:not(.is-showing-answer) .dscf-msgnav-role-question,
+        .dscf-msgnav-item.is-active.is-showing-answer .dscf-msgnav-role-answer {
             color: var(--dscf-nav-active);
         }
 

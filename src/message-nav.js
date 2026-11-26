@@ -1,8 +1,8 @@
 import { runtime } from './runtime.js';
 
 // 通用消息导航：复刻 DeepSeek 原生导航——右侧一颗胶囊收成一列横线，悬停展开提问列表，
-// 点击条目跳到当前预览的消息；条目右侧的回答图标按钮把预览从提问切成回答并跳过去，
-// 再点一下（此时显示提问图标）切回提问。所有站点（含 DeepSeek）都用这一套，
+// 点击条目跳到当前预览的消息；条目文字右侧固定并排提问/回答两个图标按钮，点哪一侧就切到
+// 哪一侧预览并跳过去，两个按钮的位置不随切换互换。所有站点（含 DeepSeek）都用这一套，
 // DeepSeek 的原生导航由样式隐藏；实现只依赖 DOM，不碰站点内部实例。
 //
 // 识别规则：
@@ -535,8 +535,8 @@ const ANSWER_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="fals
     + ' stroke-width="1.3" stroke-linecap="round"/>'
     + '</svg>';
 
-// 行内预览在提问和回答之间切换：左边图标标明当前预览的是哪一侧，
-// 右侧按钮显示另一侧的图标，点一下就把预览切到那一侧并跳过去
+// 行内预览在提问和回答之间切换：文字右侧「提问 / 回答」两个按钮始终并排，
+// 当前预览的一侧全亮、另一侧变淡，位置不随模式变化
 function isShowingAnswer(entry) {
     return Boolean(entry.replyKey) && state.answerPreview.has(entry.key);
 }
@@ -553,23 +553,19 @@ function applyAnswerPreview(entry, showingAnswer) {
 
     row.classList.toggle('is-showing-answer', showingAnswer);
 
-    const role = row.querySelector('.dscf-msgnav-role');
-    if (role) role.innerHTML = showingAnswer ? ANSWER_ICON : QUESTION_ICON;
-
-    const toggle = row.querySelector('.dscf-msgnav-toggle');
-    if (toggle && !toggle.disabled) {
-        toggle.innerHTML = showingAnswer ? QUESTION_ICON : ANSWER_ICON;
-        toggle.title = showingAnswer ? '返回提问预览' : '展开回答预览';
-        toggle.setAttribute('aria-label', toggle.title);
-    }
+    // 按钮位置不动，只用 aria-pressed 标明当前预览的是哪一侧
+    const questionRole = row.querySelector('.dscf-msgnav-role-question');
+    const answerRole = row.querySelector('.dscf-msgnav-role-answer');
+    questionRole?.setAttribute('aria-pressed', String(!showingAnswer));
+    answerRole?.setAttribute('aria-pressed', String(showingAnswer));
 
     const jump = row.querySelector('.dscf-msgnav-jump');
     jump?.setAttribute('aria-label', previewLabel(entry, showingAnswer));
 }
 
-function toggleAnswerPreview(entry) {
-    if (!entry.replyKey) return;
-    const showingAnswer = !state.answerPreview.has(entry.key);
+// 点提问/回答按钮：切到该侧预览并跳到对应消息；回答还没出现时答按钮不可用
+function switchPreview(entry, showingAnswer) {
+    if (showingAnswer && !entry.replyKey) return;
     if (showingAnswer) {
         state.answerPreview.add(entry.key);
     } else {
@@ -591,7 +587,7 @@ function renderItems() {
     state.rows = state.entries.map(entry => {
         const showingAnswer = isShowingAnswer(entry);
 
-        // 行本身是容器：一个按钮跳当前预览的消息，另一个按钮切换预览并跳转，按钮不能互相嵌套
+        // 行本身是容器：正文区点击跳当前预览，右侧并排提问/回答两个按钮，按钮不能互相嵌套
         const row = document.createElement('div');
         row.className = 'dscf-msgnav-item';
         row.classList.toggle('is-active', entry.key === state.activeKey);
@@ -602,10 +598,6 @@ function renderItems() {
         jump.type = 'button';
         jump.className = 'dscf-msgnav-jump';
         jump.setAttribute('aria-label', previewLabel(entry, showingAnswer));
-
-        const role = document.createElement('span');
-        role.className = 'dscf-msgnav-role';
-        role.innerHTML = showingAnswer ? ANSWER_ICON : QUESTION_ICON;
 
         const preview = document.createElement('span');
         preview.className = 'dscf-msgnav-preview';
@@ -628,7 +620,7 @@ function renderItems() {
         line.className = 'dscf-msgnav-line';
         indicator.append(line);
 
-        jump.append(role, preview, indicator);
+        jump.append(preview);
         jump.addEventListener('click', () => {
             if (isShowingAnswer(entry)) {
                 jumpToReply(entry);
@@ -637,16 +629,31 @@ function renderItems() {
             }
         });
 
-        const toggle = document.createElement('button');
-        toggle.type = 'button';
-        toggle.className = 'dscf-msgnav-toggle';
-        toggle.disabled = !entry.replyKey;
-        toggle.title = showingAnswer ? '返回提问预览' : (entry.replyKey ? '展开回答预览' : '还没有回答');
-        toggle.setAttribute('aria-label', toggle.title);
-        toggle.innerHTML = showingAnswer ? QUESTION_ICON : ANSWER_ICON;
-        if (entry.replyKey) toggle.addEventListener('click', () => toggleAnswerPreview(entry));
+        // 文字右侧固定并排的两个按钮：提问在左、回答紧挨着它，切换预览时只换亮度不换位置
+        const roles = document.createElement('span');
+        roles.className = 'dscf-msgnav-roles';
+        const questionRole = document.createElement('button');
+        questionRole.type = 'button';
+        questionRole.className = 'dscf-msgnav-role dscf-msgnav-role-question';
+        questionRole.title = '查看提问预览';
+        questionRole.setAttribute('aria-label', questionRole.title);
+        questionRole.setAttribute('aria-pressed', String(!showingAnswer));
+        questionRole.innerHTML = QUESTION_ICON;
+        questionRole.addEventListener('click', () => switchPreview(entry, false));
 
-        row.append(jump, toggle);
+        const answerRole = document.createElement('button');
+        answerRole.type = 'button';
+        answerRole.className = 'dscf-msgnav-role dscf-msgnav-role-answer';
+        answerRole.disabled = !entry.replyKey;
+        answerRole.title = entry.replyKey ? '查看回答预览' : '还没有回答';
+        answerRole.setAttribute('aria-label', answerRole.title);
+        answerRole.setAttribute('aria-pressed', String(showingAnswer));
+        answerRole.innerHTML = ANSWER_ICON;
+        if (entry.replyKey) answerRole.addEventListener('click', () => switchPreview(entry, true));
+
+        roles.append(questionRole, answerRole);
+
+        row.append(jump, roles, indicator);
         state.list.appendChild(row);
         return row;
     });
