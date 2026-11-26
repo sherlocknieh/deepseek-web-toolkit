@@ -160,6 +160,11 @@ const state = {
     watchTimer: null,
     halo: null,
     haloToken: 0,
+    // 跳转后高亮锁在选中条目上，等用户主动滚动才重新按位置判定
+    jumpLocked: false,
+    // 用户已动手要滚，等下一次滚动事件到来才解锁
+    awaitScroll: false,
+    onIntent: null,
     // 当前切成「回答预览」的提问 key；切回提问时移除，列表重画后仍按它恢复模式
     answerPreview: new Set()
 };
@@ -298,6 +303,9 @@ function findBlockByKey(key, el) {
 // 否则气泡虽然完整，光晕的上半圈会被滚动区顶端裁成一条直线
 const JUMP_GAP = 20;
 
+// 翻页、方向键、空格、Home/End 说明用户在键盘滚动；其余按键（打字、快捷键）不算
+const SCROLL_KEYS = /^(PageUp|PageDown|ArrowUp|ArrowDown|ArrowLeft|ArrowRight|Home|End| |Spacebar)$/;
+
 // 站点可能在消息区顶部给悬浮标题留出高度（Grok 的滚动区从视口顶开始、首条消息往下让 128px）：
 // 这段留白就是首条消息距滚动原点的距离，跳转时让出来，目标才不会压在悬浮标题下面
 function readTopInset(scroller, blocks) {
@@ -316,8 +324,9 @@ function scrollParentOf(el) {
     return null;
 }
 
-// 跳到目标消息：直接改滚动容器的 scrollTop。停在底部时站点（Grok 已确认）会把平滑滚动
-// 逐帧拉回底部，动画整段被吞掉，所以这里不做过渡动画；容器关系不明时才退回 scrollIntoView
+// 跳到目标消息并停在滚动区中间，让上下文（上一问、提问的尾巴）一起进视野。
+// 直接改滚动容器的 scrollTop：停在底部时站点（Grok 已确认）会把平滑滚动逐帧拉回底部，
+// 动画整段被吞掉，所以这里不做过渡动画；容器关系不明时才退回 scrollIntoView
 function jumpTo(entry) {
     jumpToKey(entry.key, entry.el, entry.key);
 }
@@ -339,14 +348,23 @@ function jumpToKey(key, el, activeKey, reply = false) {
     const scroller = state.scroller && state.scroller.contains(target)
         ? state.scroller
         : scrollParentOf(target);
+    const height = target.getBoundingClientRect().height;
+    // 居中后目标停在可视区正中，按「越过顶端」判定的当前位置会退回上一条：
+    // 先锁住这次跳转的条目，等用户自己滚动再交还给位置判定
+    lockActiveOnJump();
+
     if (scroller) {
+        const top = target.getBoundingClientRect().top
+            - scroller.getBoundingClientRect().top - scroller.clientTop + scroller.scrollTop;
+        // 条目比可视区还高时居中会把开头切到上方，仍按顶部对齐；
         // 换用兜底容器时 topInset 得按它自己的留白重算，直接沿用别的容器会偏出到头
-        const inset = scroller === state.scroller ? state.topInset : readTopInset(scroller, [target]);
-        scroller.scrollTop = Math.max(0, target.getBoundingClientRect().top
-            - scroller.getBoundingClientRect().top - scroller.clientTop + scroller.scrollTop
-            - inset);
+        const inset = height < scroller.clientHeight
+            ? (scroller.clientHeight - height) / 2
+            : (scroller === state.scroller ? state.topInset : readTopInset(scroller, [target]));
+        const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+        scroller.scrollTop = Math.min(Math.max(0, top - inset), max);
     } else {
-        target.scrollIntoView({ block: 'start' });
+        target.scrollIntoView({ block: height < window.innerHeight ? 'center' : 'start' });
     }
 
     // 落到正文锚点时按锚点本身画光晕：整块气泡的顶端已经在视口外，圈出来也看不见
@@ -419,9 +437,38 @@ function flashEntry(block, exact = false) {
     requestAnimationFrame(follow);
 }
 
+// 跳转锁：目标居中后「最后一条越过顶线」会算成上一条，锁住期间沿用跳转选中的条目
+function lockActiveOnJump() {
+    state.jumpLocked = true;
+    state.awaitScroll = false;
+}
+
+// 用户动手滚（滚轮、触摸、拖动、翻页键）就记下意向，等真的滚了再解锁，让高亮重新跟着位置走。
+// 只按意向不解锁：点气泡选字、点一下没滚动时目标还在中间，高亮不该退回上一条；
+// 打字和普通快捷键也不算意向，在输入框里敲空格、按方向键不该影响当前位置
+function markScrollIntent(event) {
+    if (!state.jumpLocked) return;
+    if (event && event.type === 'keydown') {
+        const target = event.target;
+        const typing = target && (target.isContentEditable
+            || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName || ''));
+        if (typing || !SCROLL_KEYS.test(event.key)) return;
+    }
+    state.awaitScroll = true;
+}
+
+// 滚动容器动了：用户自己滚出来的位移才解掉跳转锁
+function onScroll() {
+    if (state.awaitScroll) {
+        state.awaitScroll = false;
+        state.jumpLocked = false;
+    }
+    updateActive();
+}
+
 // 横线高亮跟随滚动：最后一条越过内容区顶端（悬浮标题之下那条线）的消息就是当前读到的位置
 function updateActive() {
-    if (!state.entries.length || !state.scroller) return;
+    if (!state.entries.length || !state.scroller || state.jumpLocked) return;
 
     const limit = state.scroller.getBoundingClientRect().top + state.topInset + 1;
     let key = state.entries[0].key;
@@ -652,8 +699,14 @@ function attachScroller(scroller) {
     detachScroller();
     state.scroller = scroller;
 
-    state.onScroll = () => updateActive();
+    state.onScroll = onScroll;
     scroller.addEventListener('scroll', state.onScroll, { passive: true });
+
+    // 跳转落点在中间，只有用户自己动手滚才该让高亮跟着位置变
+    state.onIntent = markScrollIntent;
+    ['wheel', 'touchstart', 'pointerdown'].forEach(type =>
+        scroller.addEventListener(type, state.onIntent, { passive: true }));
+    document.addEventListener('keydown', state.onIntent);
 
     state.observer = new MutationObserver(scheduleRefresh);
     state.observer.observe(scroller, { childList: true, subtree: true });
@@ -663,10 +716,18 @@ function detachScroller() {
     if (state.scroller && state.onScroll) {
         state.scroller.removeEventListener('scroll', state.onScroll);
     }
+    if (state.scroller && state.onIntent) {
+        ['wheel', 'touchstart', 'pointerdown'].forEach(type =>
+            state.scroller.removeEventListener(type, state.onIntent));
+    }
+    document.removeEventListener('keydown', state.onIntent);
     state.observer?.disconnect();
     state.observer = null;
     state.scroller = null;
     state.onScroll = null;
+    state.onIntent = null;
+    state.jumpLocked = false;
+    state.awaitScroll = false;
 }
 
 function scheduleRefresh() {

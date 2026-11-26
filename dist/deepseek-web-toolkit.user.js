@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 修复+优化
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.25.1701
+// @version      2026.11.26.1649
 // @author       sherlocknieh
 // @description  优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。
 // @license      MIT
@@ -2002,6 +2002,9 @@
 		watchTimer: null,
 		halo: null,
 		haloToken: 0,
+		jumpLocked: false,
+		awaitScroll: false,
+		onIntent: null,
 		answerPreview: new Set()
 	};
 	function readText(el) {
@@ -2089,6 +2092,7 @@
 		return getMessageBlocks()[Number(key)] || null;
 	}
 	var JUMP_GAP = 20;
+	var SCROLL_KEYS = /^(PageUp|PageDown|ArrowUp|ArrowDown|ArrowLeft|ArrowRight|Home|End| |Spacebar)$/;
 	function readTopInset(scroller, blocks) {
 		if (!blocks.length) return JUMP_GAP;
 		const inset = blocks[0].getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
@@ -2113,10 +2117,14 @@
 		if (!block) return;
 		const target = (reply && ADAPTER && ADAPTER.replyAnchor ? ADAPTER.replyAnchor(block) : null) || block;
 		const scroller = state.scroller && state.scroller.contains(target) ? state.scroller : scrollParentOf(target);
+		const height = target.getBoundingClientRect().height;
+		lockActiveOnJump();
 		if (scroller) {
-			const inset = scroller === state.scroller ? state.topInset : readTopInset(scroller, [target]);
-			scroller.scrollTop = Math.max(0, target.getBoundingClientRect().top - scroller.getBoundingClientRect().top - scroller.clientTop + scroller.scrollTop - inset);
-		} else target.scrollIntoView({ block: "start" });
+			const top = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top - scroller.clientTop + scroller.scrollTop;
+			const inset = height < scroller.clientHeight ? (scroller.clientHeight - height) / 2 : scroller === state.scroller ? state.topInset : readTopInset(scroller, [target]);
+			const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+			scroller.scrollTop = Math.min(Math.max(0, top - inset), max);
+		} else target.scrollIntoView({ block: height < window.innerHeight ? "center" : "start" });
 		flashEntry(target, target !== block);
 		setActive(activeKey);
 	}
@@ -2166,8 +2174,27 @@
 		};
 		requestAnimationFrame(follow);
 	}
+	function lockActiveOnJump() {
+		state.jumpLocked = true;
+		state.awaitScroll = false;
+	}
+	function markScrollIntent(event) {
+		if (!state.jumpLocked) return;
+		if (event && event.type === "keydown") {
+			const target = event.target;
+			if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName || "")) || !SCROLL_KEYS.test(event.key)) return;
+		}
+		state.awaitScroll = true;
+	}
+	function onScroll() {
+		if (state.awaitScroll) {
+			state.awaitScroll = false;
+			state.jumpLocked = false;
+		}
+		updateActive();
+	}
 	function updateActive() {
-		if (!state.entries.length || !state.scroller) return;
+		if (!state.entries.length || !state.scroller || state.jumpLocked) return;
 		const limit = state.scroller.getBoundingClientRect().top + state.topInset + 1;
 		let key = state.entries[0].key;
 		for (const entry of state.entries) {
@@ -2320,8 +2347,15 @@
 	function attachScroller(scroller) {
 		detachScroller();
 		state.scroller = scroller;
-		state.onScroll = () => updateActive();
+		state.onScroll = onScroll;
 		scroller.addEventListener("scroll", state.onScroll, { passive: true });
+		state.onIntent = markScrollIntent;
+		[
+			"wheel",
+			"touchstart",
+			"pointerdown"
+		].forEach((type) => scroller.addEventListener(type, state.onIntent, { passive: true }));
+		document.addEventListener("keydown", state.onIntent);
 		state.observer = new MutationObserver(scheduleRefresh);
 		state.observer.observe(scroller, {
 			childList: true,
@@ -2330,10 +2364,19 @@
 	}
 	function detachScroller() {
 		if (state.scroller && state.onScroll) state.scroller.removeEventListener("scroll", state.onScroll);
+		if (state.scroller && state.onIntent) [
+			"wheel",
+			"touchstart",
+			"pointerdown"
+		].forEach((type) => state.scroller.removeEventListener(type, state.onIntent));
+		document.removeEventListener("keydown", state.onIntent);
 		state.observer?.disconnect();
 		state.observer = null;
 		state.scroller = null;
 		state.onScroll = null;
+		state.onIntent = null;
+		state.jumpLocked = false;
+		state.awaitScroll = false;
 	}
 	function scheduleRefresh() {
 		clearTimeout(state.refreshTimer);
