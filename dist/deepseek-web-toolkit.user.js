@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 修复+优化
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.26.1723
+// @version      2026.11.27.2338
 // @author       sherlocknieh
 // @description  优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。
 // @license      MIT
@@ -2196,6 +2196,9 @@
 		state.rows.forEach((row) => {
 			const active = row.dataset.key === key;
 			row.classList.toggle("is-active", active);
+			const entry = state.entries.find((item) => item.key === row.dataset.key);
+			const jump = row.querySelector(".dscf-msgnav-jump");
+			if (entry && jump) jump.setAttribute("aria-label", jumpActionLabel(entry, row.classList.contains("is-showing-answer"), active));
 			if (active && state.root && state.root.matches(":hover")) row.scrollIntoView({ block: "nearest" });
 		});
 	}
@@ -2223,7 +2226,8 @@
 		const text = showingAnswer ? entry.replyText : entry.text;
 		return (showingAnswer ? "跳到回答：" : "跳到提问：") + (text || "（无正文）");
 	}
-	function jumpActionLabel(entry, showingAnswer) {
+	function jumpActionLabel(entry, showingAnswer, active) {
+		if (!active) return previewLabel(entry, showingAnswer);
 		return previewLabel(entry, entry.replyKey ? !showingAnswer : false);
 	}
 	function applyAnswerPreview(entry, showingAnswer) {
@@ -2234,7 +2238,7 @@
 		const answerRole = row.querySelector(".dscf-msgnav-role-answer");
 		questionRole?.setAttribute("aria-pressed", String(!showingAnswer));
 		answerRole?.setAttribute("aria-pressed", String(showingAnswer));
-		row.querySelector(".dscf-msgnav-jump")?.setAttribute("aria-label", jumpActionLabel(entry, showingAnswer));
+		row.querySelector(".dscf-msgnav-jump")?.setAttribute("aria-label", jumpActionLabel(entry, showingAnswer, row.classList.contains("is-active")));
 	}
 	function switchPreview(entry, showingAnswer) {
 		if (showingAnswer && !entry.replyKey) return;
@@ -2251,13 +2255,14 @@
 			const showingAnswer = isShowingAnswer(entry);
 			const row = document.createElement("div");
 			row.className = "dscf-msgnav-item";
-			row.classList.toggle("is-active", entry.key === state.activeKey);
+			const active = entry.key === state.activeKey;
+			row.classList.toggle("is-active", active);
 			row.classList.toggle("is-showing-answer", showingAnswer);
 			row.dataset.key = entry.key;
 			const jump = document.createElement("button");
 			jump.type = "button";
 			jump.className = "dscf-msgnav-jump";
-			jump.setAttribute("aria-label", jumpActionLabel(entry, showingAnswer));
+			jump.setAttribute("aria-label", jumpActionLabel(entry, showingAnswer, active));
 			const preview = document.createElement("span");
 			preview.className = "dscf-msgnav-preview";
 			const question = document.createElement("span");
@@ -2276,7 +2281,10 @@
 			indicator.append(line);
 			jump.append(preview);
 			jump.addEventListener("click", () => {
-				if (entry.replyKey) switchPreview(entry, !isShowingAnswer(entry));
+				if (entry.key !== state.activeKey) {
+					if (isShowingAnswer(entry)) jumpToReply(entry);
+					else jumpTo(entry);
+				} else if (entry.replyKey) switchPreview(entry, !isShowingAnswer(entry));
 				else jumpTo(entry);
 			});
 			const roles = document.createElement("span");
@@ -2320,7 +2328,7 @@
 				answer.title = entry.replyText || "";
 			}
 			const jump = row.querySelector(".dscf-msgnav-jump");
-			if (jump) jump.setAttribute("aria-label", jumpActionLabel(entry, row.classList.contains("is-showing-answer")));
+			if (jump) jump.setAttribute("aria-label", jumpActionLabel(entry, row.classList.contains("is-showing-answer"), row.classList.contains("is-active")));
 		});
 	}
 	function syncVisibility() {
