@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 修复+优化
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.28.1500
+// @version      2026.11.28.1501
 // @author       sherlocknieh
 // @description  优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。
 // @license      MIT
@@ -2040,6 +2040,7 @@
 				const [root] = deepseekAnswerRoots(el);
 				return root && (root.firstElementChild || root);
 			},
+			replyBubble: (el) => deepseekAnswerRoots(el)[0] || null,
 			scroller: ".ds-scroll-area"
 		},
 		{
@@ -2232,7 +2233,7 @@
 			target.scrollIntoView({ block: "start" });
 			window.scrollBy(0, -inset);
 		}
-		flashEntry(target, target !== block);
+		flashEntry(target, (reply && ADAPTER && ADAPTER.replyBubble ? ADAPTER.replyBubble(block) : null) || (target !== block ? target : null));
 		setActive(activeKey);
 	}
 	function roundedImageBox(block) {
@@ -2250,8 +2251,8 @@
 		state.halo = halo;
 		return halo;
 	}
-	function flashEntry(block, exact = false) {
-		const bubble = exact ? block : (ADAPTER && ADAPTER.bubble ? ADAPTER.bubble(block) : null) || roundedImageBox(block) || block;
+	function flashEntry(block, exact = null) {
+		const bubble = exact || (ADAPTER && ADAPTER.bubble ? ADAPTER.bubble(block) : null) || roundedImageBox(block) || block;
 		const halo = ensureHalo();
 		const radius = getComputedStyle(bubble).borderRadius;
 		const place = () => {

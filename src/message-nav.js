@@ -82,11 +82,13 @@ const SITE_ADAPTERS = [
         bubble: el => Array.from(el.querySelectorAll('.ds-message > div'))
             .find(node => (node.innerText || '').trim()),
         // 回答的跳转落点：消息块顶端是思考栏，对齐它只会看到「已思考」标题，
-        // 正文被推到下面。从正文根的首个子元素开始，光晕也正好圈住回答开头
+        // 正文被推到下面。从正文根的首个子元素开始，光晕则圈住整块正文容器
         replyAnchor: el => {
             const [root] = deepseekAnswerRoots(el);
             return root && (root.firstElementChild || root);
         },
+        // 高亮范围：正文容器本身；老版本没有容器时退回锚点（第一段正文）
+        replyBubble: el => deepseekAnswerRoots(el)[0] || null,
         scroller: '.ds-scroll-area'
     },
     {
@@ -391,8 +393,10 @@ function jumpToKey(key, el, activeKey, reply = false) {
         window.scrollBy(0, -inset);
     }
 
-    // 落到正文锚点时按锚点本身画光晕：整块气泡的顶端已经在视口外，圈出来也看不见
-    flashEntry(target, target !== block);
+    // 回答落点在正文容器里：光晕按站点声明的正文容器画，圈住整块回答而不是第一段；
+    // 站点没给容器时退回锚点本身（整块气泡的顶端已经在视口外，圈出来也看不见）
+    const replyBubble = reply && ADAPTER && ADAPTER.replyBubble ? ADAPTER.replyBubble(block) : null;
+    flashEntry(target, replyBubble || (target !== block ? target : null));
     setActive(activeKey);
 }
 
@@ -418,12 +422,13 @@ function ensureHalo() {
     return halo;
 }
 
-// 跳转后短暂高亮气泡，提示定位到了哪条提问；exact 用于回答锚点，
-// 此时落点本身就是正文开头，不再套气泡或圆角图片框
-function flashEntry(block, exact = false) {
+// 跳转后短暂高亮，提示定位到了哪条消息；exact 给了元素时只圈这个元素
+// （回答锚点或正文容器），不再套气泡或圆角图片框
+function flashEntry(block, exact = null) {
     const bubble = exact
-        ? block
-        : (ADAPTER && ADAPTER.bubble ? ADAPTER.bubble(block) : null) || roundedImageBox(block) || block;
+        || (ADAPTER && ADAPTER.bubble ? ADAPTER.bubble(block) : null)
+        || roundedImageBox(block)
+        || block;
     const halo = ensureHalo();
     const radius = getComputedStyle(bubble).borderRadius;
 
