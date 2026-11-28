@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 修复+优化
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.28.1536
+// @version      2026.11.28.1807
 // @author       sherlocknieh
 // @description  优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。
 // @license      MIT
@@ -541,6 +541,51 @@
         /* 回答还没出现：答按钮不占位，问按钮旁边只留它自己 */
         .dscf-msgnav-role:disabled {
             display: none;
+        }
+
+        /* 一个提问下有多条独立回答时，每条回答单独占一行子条目：
+           行首是序号（不是按钮，悬停才显形），文字直接显示该条回答的预览，
+           点击切到这条回答并跳过去；行高比父条目矮一档，视觉上从属于上一问 */
+        .dscf-msgnav-item.is-sub {
+            height: 24px;
+        }
+
+        .dscf-msgnav-item.is-sub .dscf-msgnav-jump {
+            padding-left: 14px;
+        }
+
+        .dscf-msgnav-item.is-sub .dscf-msgnav-text {
+            font-size: 12px;
+            line-height: 18px;
+        }
+
+        .dscf-msgnav-item.is-sub .dscf-msgnav-roles {
+            padding: 0;
+            background-color: transparent;
+        }
+
+        .dscf-msgnav-subindex {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+            border-radius: 999px;
+            color: var(--dscf-nav-title);
+            font-size: 10px;
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
+            opacity: 0;
+            transition: opacity 0.1s ease, color 0.2s ease;
+        }
+
+        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-subindex {
+            opacity: 0.55;
+        }
+
+        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-item.is-sub.is-active .dscf-msgnav-subindex {
+            color: var(--dscf-nav-active);
+            opacity: 1;
         }
 
         /* 横线的定位盒固定 16×20，横线本身 8×2；当前项放大 1.5 倍并变成品牌色。
@@ -2003,6 +2048,18 @@
 	var FLASH_MS = 600;
 	var NAV_EDGE = 16;
 	var MIN_ENTRIES = 1;
+	var KEY_ATTRS = [
+		"data-virtual-list-item-key",
+		"data-message-id",
+		"data-chatgpt-search-unit-key"
+	];
+	var identity = createIdentity();
+	function createIdentity() {
+		return {
+			nextId: 0,
+			byEl: new WeakMap()
+		};
+	}
 	function deepseekAnswerRoots(el) {
 		const body = el.querySelector(".ds-assistant-message-main-content");
 		if (body) return [body];
@@ -2094,10 +2151,13 @@
 		scroller: null,
 		topInset: 0,
 		entries: [],
+		items: [],
+		itemsByKey: new Map(),
 		signature: "",
 		root: null,
 		list: null,
 		rows: [],
+		rowsByKey: new Map(),
 		activeKey: null,
 		observer: null,
 		onScroll: null,
@@ -2111,6 +2171,7 @@
 		awaitScroll: false,
 		onIntent: null,
 		answerPreview: new Set(),
+		answerReply: new Map(),
 		dismissed: false,
 		position: null,
 		drag: null,
@@ -2170,37 +2231,118 @@
 			return /(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 200 && blocks.some((block) => el.contains(block));
 		}).sort((a, b) => b.scrollHeight - a.scrollHeight)[0] || null;
 	}
-	function readEntries() {
-		const blocks = getMessageBlocks().map((el, index) => ({
-			key: String(index),
-			el,
-			role: detectRole(el, index),
-			text: readText(el)
-		}));
-		return blocks.map((entry, index) => {
-			if (!isUserEntry(entry)) return null;
-			const next = blocks[index + 1];
-			const reply = next && next.role === "ASSISTANT" ? next : null;
+	function attrKey(el) {
+		for (const attr of KEY_ATTRS) {
+			const value = el.getAttribute(attr);
+			if (value) return "k:" + attr + ":" + value;
+		}
+		return null;
+	}
+	function readPass() {
+		return getMessageBlocks().map((el, index) => {
+			const role = detectRole(el, index);
+			const text = readText(el);
+			const attr = attrKey(el);
+			const known = identity.byEl.get(el);
+			if (attr && known && known !== attr) {
+				const stale = state.itemsByKey.get(known);
+				if (stale) stale.el = null;
+			}
 			return {
-				...entry,
-				replyKey: reply ? reply.key : null,
-				replyEl: reply ? reply.el : null,
-				replyText: reply ? reply.text : ""
+				el,
+				role,
+				text,
+				key: attr || known || null
 			};
-		}).filter(Boolean);
+		});
+	}
+	function mergePass(blocks) {
+		const claimed = new Set(blocks.map((block) => block.key).filter(Boolean));
+		let cursor = 0;
+		for (const block of blocks) {
+			if (!block.key) {
+				const landed = findRemembered(block, claimed, cursor);
+				if (landed) {
+					block.key = landed.key;
+					cursor = landed.index + 1;
+				} else block.key = "i:" + (identity.nextId += 1);
+			}
+			claimed.add(block.key);
+			identity.byEl.set(block.el, block.key);
+		}
+		const fresh = blocks.map(({ key, role, text, el }) => ({
+			key,
+			role,
+			text,
+			el
+		}));
+		const order = mergeOrder(fresh.map((item) => item.key));
+		const freshByKey = new Map(fresh.map((item) => [item.key, item]));
+		const items = order.map((key) => freshByKey.get(key) || state.itemsByKey.get(key)).filter(Boolean);
+		state.items = items;
+		state.itemsByKey = new Map(items.map((item) => [item.key, item]));
+		state.entries = groupEntries(items);
+		return state.entries;
+	}
+	function findRemembered(block, claimed, from) {
+		for (let index = from; index < state.items.length; index += 1) {
+			const item = state.items[index];
+			if (claimed.has(item.key) || item.role !== block.role || item.text !== block.text) continue;
+			return {
+				key: item.key,
+				index
+			};
+		}
+		return null;
+	}
+	function mergeOrder(freshKeys) {
+		const order = state.items.map((item) => item.key);
+		const atByKey = new Map(order.map((key, index) => [key, index]));
+		freshKeys.forEach((key, freshIndex) => {
+			if (atByKey.has(key)) return;
+			let at = -1;
+			for (let i = freshIndex - 1; i >= 0 && at < 0; i -= 1) {
+				const hit = atByKey.get(freshKeys[i]);
+				if (hit !== void 0) at = hit + 1;
+			}
+			for (let i = freshIndex + 1; i < freshKeys.length && at < 0; i += 1) {
+				const hit = atByKey.get(freshKeys[i]);
+				if (hit !== void 0) at = hit;
+			}
+			if (at < 0) at = order.length;
+			order.splice(at, 0, key);
+			for (let i = at; i < order.length; i += 1) atByKey.set(order[i], i);
+		});
+		return order;
+	}
+	function groupEntries(items) {
+		const entries = [];
+		let current = null;
+		for (const item of items) if (isUserEntry(item)) {
+			current = {
+				...item,
+				replies: []
+			};
+			entries.push(current);
+		} else if (current) current.replies.push(item);
+		return entries;
 	}
 	function makeSignature(entries) {
-		return entries.map((entry) => entry.key + ":" + (entry.replyKey || "-") + ":" + entry.text.slice(0, 12)).join("|");
+		return entries.map((entry) => entry.key + ":" + entry.replies.map((reply) => reply.key).join(",") + ":" + entry.text.slice(0, 12)).join("|");
 	}
 	function isUserEntry(entry) {
 		return entry.role === "USER";
 	}
-	function findBlock(entry) {
-		return findBlockByKey(entry.key, entry.el);
+	function findBlock(item) {
+		if (item.el && item.el.isConnected) return item.el;
+		const block = item.key ? getMessageBlocks().find((el) => (attrKey(el) || identity.byEl.get(el)) === item.key) : null;
+		if (block) item.el = block;
+		return block || null;
 	}
-	function findBlockByKey(key, el) {
-		if (el && el.isConnected) return el;
-		return getMessageBlocks()[Number(key)] || null;
+	function selectedReply(entry) {
+		if (!entry.replies.length) return null;
+		const key = state.answerReply.get(entry.key);
+		return entry.replies.find((reply) => reply.key === key) || entry.replies[0];
 	}
 	var ACTIVE_LINE_OFFSET = 20;
 	var SCROLL_KEYS = /^(PageUp|PageDown|ArrowUp|ArrowDown|ArrowLeft|ArrowRight|Home|End| |Spacebar)$/;
@@ -2220,12 +2362,19 @@
 		jumpToKey(entry.key, entry.el, entry.key);
 	}
 	function jumpToReply(entry) {
-		if (!entry.replyKey) return;
-		jumpToKey(entry.replyKey, entry.replyEl, entry.key, true);
+		const reply = selectedReply(entry);
+		if (!reply) return;
+		jumpToKey(reply.key, reply.el, entry.key, true);
 	}
-	function jumpToKey(key, el, activeKey, reply = false) {
-		const block = findBlockByKey(key, el);
-		if (!block) return;
+	function jumpToKey(key, el, activeKey, reply = false, retry = true) {
+		const block = el && el.isConnected ? el : findBlock({
+			key,
+			el
+		});
+		if (!block) {
+			if (retry) jumpToUnmounted(key, activeKey, reply);
+			return;
+		}
 		const target = (reply && ADAPTER && ADAPTER.replyAnchor ? ADAPTER.replyAnchor(block) : null) || block;
 		const scroller = state.scroller && state.scroller.contains(target) ? state.scroller : scrollParentOf(target);
 		const height = target.getBoundingClientRect().height;
@@ -2242,6 +2391,20 @@
 		}
 		flashEntry(target, (reply && ADAPTER && ADAPTER.replyBubble ? ADAPTER.replyBubble(block) : null) || (target !== block ? target : null));
 		setActive(activeKey);
+	}
+	function jumpToUnmounted(key, activeKey, reply) {
+		const scroller = state.scroller;
+		const index = state.items.findIndex((item) => item.key === key);
+		if (!scroller || index < 0) return;
+		lockActiveOnJump();
+		const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+		scroller.scrollTop = state.items.length > 1 ? index / (state.items.length - 1) * max : 0;
+		setActive(activeKey);
+		setTimeout(() => {
+			const item = state.itemsByKey.get(key);
+			const block = item && findBlock(item);
+			if (block) jumpToKey(key, block, activeKey, reply, false);
+		}, 400);
 	}
 	function roundedImageBox(block) {
 		const img = block.querySelector("img");
@@ -2313,8 +2476,11 @@
 		const limit = state.scroller.getBoundingClientRect().top + state.topInset + 1;
 		let key = state.entries[0].key;
 		for (const entry of state.entries) {
-			const block = findBlock(entry);
-			if (block && block.getBoundingClientRect().top <= limit) key = entry.key;
+			const candidates = entry.replies.length > 1 ? [entry, ...entry.replies] : [entry];
+			for (const item of candidates) {
+				const block = item.el && item.el.isConnected ? item.el : null;
+				if (block && block.getBoundingClientRect().top <= limit) key = item.key;
+			}
 		}
 		setActive(key);
 	}
@@ -2369,18 +2535,19 @@
 	var CLOSE_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\" stroke-linecap=\"round\"/></svg>";
 	var GRIP_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><g fill=\"currentColor\"><circle cx=\"6\" cy=\"4.5\" r=\"1\"/><circle cx=\"10\" cy=\"4.5\" r=\"1\"/><circle cx=\"6\" cy=\"8\" r=\"1\"/><circle cx=\"10\" cy=\"8\" r=\"1\"/><circle cx=\"6\" cy=\"11.5\" r=\"1\"/><circle cx=\"10\" cy=\"11.5\" r=\"1\"/></g></svg>";
 	function isShowingAnswer(entry) {
-		return Boolean(entry.replyKey) && state.answerPreview.has(entry.key);
+		return Boolean(entry.replies.length) && state.answerPreview.has(entry.key);
 	}
 	function previewLabel(entry, showingAnswer) {
-		const text = showingAnswer ? entry.replyText : entry.text;
+		const reply = selectedReply(entry);
+		const text = showingAnswer && reply ? reply.text : entry.text;
 		return (showingAnswer ? "跳到回答：" : "跳到提问：") + (text || "（无正文）");
 	}
 	function jumpActionLabel(entry, showingAnswer, active) {
 		if (!active) return previewLabel(entry, showingAnswer);
-		return previewLabel(entry, entry.replyKey ? !showingAnswer : false);
+		return previewLabel(entry, entry.replies.length ? !showingAnswer : false);
 	}
 	function applyAnswerPreview(entry, showingAnswer) {
-		const row = state.rows.find((item) => item.dataset.key === entry.key);
+		const row = state.rowsByKey.get(entry.key);
 		if (!row) return;
 		row.classList.toggle("is-showing-answer", showingAnswer);
 		const questionRole = row.querySelector(".dscf-msgnav-role-question");
@@ -2390,7 +2557,7 @@
 		row.querySelector(".dscf-msgnav-jump")?.setAttribute("aria-label", jumpActionLabel(entry, showingAnswer, row.classList.contains("is-active")));
 	}
 	function switchPreview(entry, showingAnswer) {
-		if (showingAnswer && !entry.replyKey) return;
+		if (showingAnswer && !entry.replies.length) return;
 		if (showingAnswer) state.answerPreview.add(entry.key);
 		else state.answerPreview.delete(entry.key);
 		applyAnswerPreview(entry, showingAnswer);
@@ -2400,86 +2567,145 @@
 	function renderItems() {
 		ensureDom();
 		state.rows.forEach((row) => row.remove());
-		state.rows = state.entries.map((entry) => {
-			const showingAnswer = isShowingAnswer(entry);
-			const row = document.createElement("div");
-			row.className = "dscf-msgnav-item";
-			const active = entry.key === state.activeKey;
-			row.classList.toggle("is-active", active);
-			row.classList.toggle("is-showing-answer", showingAnswer);
-			row.dataset.key = entry.key;
-			const jump = document.createElement("button");
-			jump.type = "button";
-			jump.className = "dscf-msgnav-jump";
-			jump.setAttribute("aria-label", jumpActionLabel(entry, showingAnswer, active));
-			const preview = document.createElement("span");
-			preview.className = "dscf-msgnav-preview";
-			const question = document.createElement("span");
-			question.className = "dscf-msgnav-text dscf-msgnav-text-question";
-			question.textContent = entry.text || "（无正文）";
-			question.title = entry.text || "";
-			const answer = document.createElement("span");
-			answer.className = "dscf-msgnav-text dscf-msgnav-text-answer";
-			answer.textContent = entry.replyText || "（还没有回答）";
-			answer.title = entry.replyText || "";
-			preview.append(question, answer);
-			const indicator = document.createElement("span");
-			indicator.className = "dscf-msgnav-indicator";
-			const line = document.createElement("span");
-			line.className = "dscf-msgnav-line";
-			indicator.append(line);
-			jump.append(preview);
-			const roles = document.createElement("span");
-			roles.className = "dscf-msgnav-roles";
-			const questionRole = document.createElement("button");
-			questionRole.type = "button";
-			questionRole.className = "dscf-msgnav-role dscf-msgnav-role-question";
-			questionRole.title = "查看提问预览";
-			questionRole.setAttribute("aria-label", questionRole.title);
-			questionRole.setAttribute("aria-pressed", String(!showingAnswer));
-			questionRole.innerHTML = QUESTION_ICON;
-			questionRole.addEventListener("click", () => switchPreview(entry, false));
-			const answerRole = document.createElement("button");
-			answerRole.type = "button";
-			answerRole.className = "dscf-msgnav-role dscf-msgnav-role-answer";
-			answerRole.disabled = !entry.replyKey;
-			answerRole.title = entry.replyKey ? "查看回答预览" : "还没有回答";
-			answerRole.setAttribute("aria-label", answerRole.title);
-			answerRole.setAttribute("aria-pressed", String(showingAnswer));
-			answerRole.innerHTML = ANSWER_ICON;
-			if (entry.replyKey) answerRole.addEventListener("click", () => switchPreview(entry, true));
-			roles.append(questionRole, answerRole);
-			row.append(roles, jump, indicator);
-			row.addEventListener("click", (event) => {
-				if (event.target.closest(".dscf-msgnav-roles")) return;
-				if (entry.key !== state.activeKey) {
-					if (isShowingAnswer(entry)) jumpToReply(entry);
-					else jumpTo(entry);
-				} else if (entry.replyKey) switchPreview(entry, !isShowingAnswer(entry));
-				else jumpTo(entry);
-			});
-			state.list.appendChild(row);
-			return row;
+		state.rows = [];
+		state.rowsByKey = new Map();
+		state.entries.forEach((entry) => {
+			addRow(buildItemRow(entry));
+			if (entry.replies.length > 1) entry.replies.forEach((reply, index) => addRow(buildReplyRow(entry, reply, index)));
 		});
 	}
-	function syncEntryTexts() {
-		const byKey = new Map(state.entries.map((entry) => [entry.key, entry]));
-		state.rows.forEach((row) => {
-			const entry = byKey.get(row.dataset.key);
-			if (!entry) return;
-			const question = row.querySelector(".dscf-msgnav-text-question");
-			if (question) {
-				question.textContent = entry.text || "（无正文）";
-				question.title = entry.text || "";
-			}
-			const answer = row.querySelector(".dscf-msgnav-text-answer");
-			if (answer) {
-				answer.textContent = entry.replyText || "（还没有回答）";
-				answer.title = entry.replyText || "";
-			}
-			const jump = row.querySelector(".dscf-msgnav-jump");
-			if (jump) jump.setAttribute("aria-label", jumpActionLabel(entry, row.classList.contains("is-showing-answer"), row.classList.contains("is-active")));
+	function addRow(row) {
+		state.rows.push(row);
+		state.rowsByKey.set(row.dataset.key, row);
+		state.list.appendChild(row);
+	}
+	function buildItemRow(entry) {
+		const showingAnswer = isShowingAnswer(entry);
+		const reply = selectedReply(entry);
+		const row = document.createElement("div");
+		row.className = "dscf-msgnav-item";
+		const active = entry.key === state.activeKey;
+		row.classList.toggle("is-active", active);
+		row.classList.toggle("is-showing-answer", showingAnswer);
+		row.dataset.key = entry.key;
+		const jump = document.createElement("button");
+		jump.type = "button";
+		jump.className = "dscf-msgnav-jump";
+		jump.setAttribute("aria-label", jumpActionLabel(entry, showingAnswer, active));
+		const preview = document.createElement("span");
+		preview.className = "dscf-msgnav-preview";
+		const question = document.createElement("span");
+		question.className = "dscf-msgnav-text dscf-msgnav-text-question";
+		question.textContent = entry.text || "（无正文）";
+		question.title = entry.text || "";
+		const answer = document.createElement("span");
+		answer.className = "dscf-msgnav-text dscf-msgnav-text-answer";
+		answer.textContent = reply ? reply.text || "（无正文）" : "（还没有回答）";
+		answer.title = reply ? reply.text || "" : "";
+		preview.append(question, answer);
+		const indicator = document.createElement("span");
+		indicator.className = "dscf-msgnav-indicator";
+		const line = document.createElement("span");
+		line.className = "dscf-msgnav-line";
+		indicator.append(line);
+		jump.append(preview);
+		const roles = document.createElement("span");
+		roles.className = "dscf-msgnav-roles";
+		const questionRole = document.createElement("button");
+		questionRole.type = "button";
+		questionRole.className = "dscf-msgnav-role dscf-msgnav-role-question";
+		questionRole.title = "查看提问预览";
+		questionRole.setAttribute("aria-label", questionRole.title);
+		questionRole.setAttribute("aria-pressed", String(!showingAnswer));
+		questionRole.innerHTML = QUESTION_ICON;
+		questionRole.addEventListener("click", () => switchPreview(entry, false));
+		const answerRole = document.createElement("button");
+		answerRole.type = "button";
+		answerRole.className = "dscf-msgnav-role dscf-msgnav-role-answer";
+		answerRole.disabled = !entry.replies.length;
+		answerRole.title = entry.replies.length ? "查看回答预览" : "还没有回答";
+		answerRole.setAttribute("aria-label", answerRole.title);
+		answerRole.setAttribute("aria-pressed", String(showingAnswer));
+		answerRole.innerHTML = ANSWER_ICON;
+		if (entry.replies.length) answerRole.addEventListener("click", () => switchPreview(entry, true));
+		roles.append(questionRole, answerRole);
+		row.append(roles, jump, indicator);
+		row.addEventListener("click", (event) => {
+			if (event.target.closest(".dscf-msgnav-roles")) return;
+			if (entry.key !== state.activeKey) {
+				if (isShowingAnswer(entry)) jumpToReply(entry);
+				else jumpTo(entry);
+			} else if (entry.replies.length) switchPreview(entry, !isShowingAnswer(entry));
+			else jumpTo(entry);
 		});
+		return row;
+	}
+	function buildReplyRow(entry, reply, index) {
+		const row = document.createElement("div");
+		row.className = "dscf-msgnav-item is-sub is-showing-answer";
+		row.classList.toggle("is-active", reply.key === state.activeKey);
+		row.dataset.key = reply.key;
+		row.dataset.parentKey = entry.key;
+		const roles = document.createElement("span");
+		roles.className = "dscf-msgnav-roles";
+		const order = document.createElement("span");
+		order.className = "dscf-msgnav-subindex";
+		order.textContent = String(index + 1);
+		roles.append(order);
+		const jump = document.createElement("button");
+		jump.type = "button";
+		jump.className = "dscf-msgnav-jump";
+		jump.setAttribute("aria-label", "跳到回答 " + (index + 1) + "：" + (reply.text || "（无正文）"));
+		const preview = document.createElement("span");
+		preview.className = "dscf-msgnav-preview";
+		const answer = document.createElement("span");
+		answer.className = "dscf-msgnav-text dscf-msgnav-text-answer";
+		answer.textContent = reply.text || "（无正文）";
+		answer.title = reply.text || "";
+		preview.append(answer);
+		jump.append(preview);
+		const indicator = document.createElement("span");
+		indicator.className = "dscf-msgnav-indicator";
+		const line = document.createElement("span");
+		line.className = "dscf-msgnav-line";
+		indicator.append(line);
+		row.append(roles, jump, indicator);
+		row.addEventListener("click", () => {
+			state.answerReply.set(entry.key, reply.key);
+			state.answerPreview.add(entry.key);
+			applyAnswerPreview(entry, true);
+			jumpToKey(reply.key, reply.el, reply.key, true);
+		});
+		return row;
+	}
+	function syncEntryTexts() {
+		const entryByKey = new Map(state.entries.map((entry) => [entry.key, entry]));
+		const replyByKey = new Map();
+		state.entries.forEach((entry) => entry.replies.forEach((reply) => replyByKey.set(reply.key, reply)));
+		state.rows.forEach((row) => {
+			const entry = entryByKey.get(row.dataset.key);
+			if (entry) {
+				const reply = selectedReply(entry);
+				setRowText(row.querySelector(".dscf-msgnav-text-question"), entry.text, "（无正文）");
+				setRowText(row.querySelector(".dscf-msgnav-text-answer"), reply ? reply.text : "", "（还没有回答）");
+				const jump = row.querySelector(".dscf-msgnav-jump");
+				if (jump) jump.setAttribute("aria-label", jumpActionLabel(entry, row.classList.contains("is-showing-answer"), row.classList.contains("is-active")));
+				return;
+			}
+			const reply = replyByKey.get(row.dataset.key);
+			if (!reply) return;
+			setRowText(row.querySelector(".dscf-msgnav-text-answer"), reply.text, "（无正文）");
+			const jump = row.querySelector(".dscf-msgnav-jump");
+			if (jump) {
+				const label = "跳到回答：" + (reply.text || "（无正文）");
+				jump.setAttribute("aria-label", label);
+			}
+		});
+	}
+	function setRowText(node, text, empty) {
+		if (!node) return;
+		node.textContent = text || empty;
+		node.title = text || "";
 	}
 	function syncVisibility() {
 		if (!state.root) return;
@@ -2640,7 +2866,18 @@
 		state.answerPreview.clear();
 		state.rows.forEach((row) => row.remove());
 		state.rows = [];
+		state.rowsByKey = new Map();
 		syncVisibility();
+	}
+	function resetDiscovery() {
+		identity = createIdentity();
+		state.items = [];
+		state.itemsByKey = new Map();
+		state.entries = [];
+		state.signature = "";
+		state.activeKey = null;
+		state.answerPreview.clear();
+		state.answerReply.clear();
 	}
 	function attachScroller(scroller) {
 		detachScroller();
@@ -2681,21 +2918,21 @@
 		state.refreshTimer = setTimeout(() => refreshMessageNav(), 300);
 	}
 	function refreshMessageNav() {
-		const entries = readEntries();
+		const entries = mergePass(readPass());
 		if (entries.length < MIN_ENTRIES) {
 			clearMessageNav();
 			return;
 		}
-		const scroller = resolveScroller(entries.map((entry) => entry.el));
+		const mounted = state.items.map((item) => item.el).filter((el) => el && el.isConnected);
+		const scroller = resolveScroller(mounted);
 		if (!scroller) {
 			clearMessageNav();
 			scheduleWatch();
 			return;
 		}
 		if (scroller !== state.scroller) attachScroller(scroller);
-		state.topInset = readTopInset(scroller, entries.map((entry) => entry.el));
+		state.topInset = readTopInset(scroller, mounted);
 		const signature = makeSignature(entries);
-		state.entries = entries;
 		if (signature !== state.signature) {
 			state.signature = signature;
 			renderItems();
@@ -2707,7 +2944,7 @@
 	function scheduleWatch() {
 		clearInterval(state.watchTimer);
 		state.watchTimer = setInterval(() => {
-			if (readEntries().length < MIN_ENTRIES) return;
+			if (!getMessageBlocks().length) return;
 			clearInterval(state.watchTimer);
 			state.watchTimer = null;
 			refreshMessageNav();
@@ -2722,11 +2959,12 @@
 		state.historyTimer = setInterval(() => {
 			if (location.href === state.href) return;
 			state.href = location.href;
+			resetDiscovery();
 			scheduleRefresh();
 		}, 700);
 		runtime.refreshMessageNav = refreshMessageNav;
 		refreshMessageNav();
-		if (readEntries().length < MIN_ENTRIES) scheduleWatch();
+		if (!getMessageBlocks().length) scheduleWatch();
 	}
 	function teardownMessageNav() {
 		detachScroller();
@@ -2747,11 +2985,16 @@
 		state.card = null;
 		state.bar = null;
 		state.rows = [];
+		state.rowsByKey = new Map();
 		state.entries = [];
+		state.items = [];
+		state.itemsByKey = new Map();
 		state.activeKey = null;
 		state.signature = "";
 		state.topInset = 0;
 		state.answerPreview.clear();
+		state.answerReply.clear();
+		identity = createIdentity();
 		state.dismissed = false;
 		state.position = null;
 		state.drag = null;

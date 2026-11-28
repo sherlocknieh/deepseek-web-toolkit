@@ -457,6 +457,51 @@ export function addCSSClass() {
             display: none;
         }
 
+        /* 一个提问下有多条独立回答时，每条回答单独占一行子条目：
+           行首是序号（不是按钮，悬停才显形），文字直接显示该条回答的预览，
+           点击切到这条回答并跳过去；行高比父条目矮一档，视觉上从属于上一问 */
+        .dscf-msgnav-item.is-sub {
+            height: 24px;
+        }
+
+        .dscf-msgnav-item.is-sub .dscf-msgnav-jump {
+            padding-left: 14px;
+        }
+
+        .dscf-msgnav-item.is-sub .dscf-msgnav-text {
+            font-size: 12px;
+            line-height: 18px;
+        }
+
+        .dscf-msgnav-item.is-sub .dscf-msgnav-roles {
+            padding: 0;
+            background-color: transparent;
+        }
+
+        .dscf-msgnav-subindex {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+            border-radius: 999px;
+            color: var(--dscf-nav-title);
+            font-size: 10px;
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
+            opacity: 0;
+            transition: opacity 0.1s ease, color 0.2s ease;
+        }
+
+        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-subindex {
+            opacity: 0.55;
+        }
+
+        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-item.is-sub.is-active .dscf-msgnav-subindex {
+            color: var(--dscf-nav-active);
+            opacity: 1;
+        }
+
         /* 横线的定位盒固定 16×20，横线本身 8×2；当前项放大 1.5 倍并变成品牌色。
            收起时列表整体不接事件，唯独横线这一小条重新打开命中：触屏第一次点横线
            也能直接跳转，不会因为面板还没展开而丢掉点击 */
