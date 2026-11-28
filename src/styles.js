@@ -338,7 +338,7 @@ export function addCSSClass() {
         }
 
         /* 一项一条消息：预览文字靠左、图标和横线靠右；收起时文字和图标透明，只留横线。
-           行是容器，正文区点击切换提问/回答，右侧两个按钮分别预览提问/回答 */
+           整行都是命中区（横线也点得动），右侧两个按钮分别预览提问/回答 */
         .dscf-msgnav-item {
             position: relative;
             display: flex;
@@ -349,6 +349,7 @@ export function addCSSClass() {
             color: inherit;
             font: inherit;
             text-align: left;
+            cursor: pointer;
         }
 
         .dscf-msgnav-jump {
@@ -453,7 +454,9 @@ export function addCSSClass() {
             display: none;
         }
 
-        /* 横线的定位盒固定 16×20，横线本身 8×2；当前项放大 1.5 倍并变成品牌色 */
+        /* 横线的定位盒固定 16×20，横线本身 8×2；当前项放大 1.5 倍并变成品牌色。
+           收起时列表整体不接事件，唯独横线这一小条重新打开命中：触屏第一次点横线
+           也能直接跳转，不会因为面板还没展开而丢掉点击 */
         .dscf-msgnav-indicator {
             flex: 0 0 16px;
             display: flex;
@@ -461,6 +464,7 @@ export function addCSSClass() {
             justify-content: center;
             width: 16px;
             height: 20px;
+            pointer-events: auto;
         }
 
         .dscf-msgnav-line {
