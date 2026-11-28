@@ -2,17 +2,15 @@ import { runtime } from './runtime.js';
 import { storageGet, storageSet } from './storage.js';
 import { NAV_POSITION_KEY } from './constants.js';
 
-// 通用消息导航：复刻 DeepSeek 原生导航——右侧一颗胶囊收成一列横线，悬停展开提问列表，
-// 点击非当前条目的正文只跳过去、保持它已有的预览侧，点当前条目的正文才在提问/回答之间切换；
-// 条目文字右侧固定并排提问/回答两个图标按钮，点哪一侧就切到哪一侧预览并跳过去，
-// 两个按钮的位置不随切换互换。所有站点（含 DeepSeek）都用这一套，
-// DeepSeek 的原生导航由样式隐藏；实现只依赖 DOM，不碰站点内部实例。
+// 通用消息导航：复刻 DeepSeek 原生导航——右侧一颗胶囊收成一列横线，悬停展开提问列表；
+// 每个提问一行，回答各占一行缩进折叠在提问下，点击提问展开/收起并跳转，点击回答跳到该条。
+// 所有站点（含 DeepSeek）都用这一套，DeepSeek 的原生导航由样式隐藏；实现只依赖 DOM，不碰站点内部实例。
 //
 // 识别规则：
 //   消息块 —— 按站点各自的结构取；没有适配的站点才退回通用语义标记
 //   滚动容器 —— 同时包含多条消息、内容最高的可滚动区块
 //   角色 —— 优先读站点标记，读不到时按提问/回答交替推断；导航列出提问，
-//           提问后面连续的每条回答各记一条，供预览切换和跳转
+//           提问后面连续的每条回答各记一条，供展开与跳转
 //   身份 —— 站点标识优先，其次按元素本身与「角色+正文」认回同一条；
 //           虚拟列表只挂载可视区，已发现的消息累积下来，滚到哪儿补到哪儿
 
@@ -204,10 +202,9 @@ const state = {
     onIntent: null,
     // 指针移动的跟踪函数：按实际位置开关展开态，重画/重渲染都不会误收
     onNavMove: null,
-    // 当前切成「回答预览」的提问 key；切回提问时移除，列表重画后仍按它恢复模式
-    answerPreview: new Set(),
-    // 多条独立回答时，每条提问当前选中的回答 key（默认第一条）
-    answerReply: new Map(),
+    // 已点开的提问 key：回答子条目默认折叠，点击提问才展开；
+    // 滚动到某条回答时自动把它的提问加进来，重画后仍按它恢复展开态
+    expanded: new Set(),
     // 用户点了关闭图标：只隐藏本次页面的导航，刷新后重新识别即恢复
     dismissed: false,
     // 本会话是否已经展示过导航：站点重渲染时条目可能瞬间归零，已经出现过就常驻，
@@ -442,13 +439,6 @@ function findBlock(item) {
     return block || null;
 }
 
-// 当前选中的回答：点子条目时记下来，否则默认第一条
-function selectedReply(entry) {
-    if (!entry.replies.length) return null;
-    const key = state.answerReply.get(entry.key);
-    return entry.replies.find(reply => reply.key === key) || entry.replies[0];
-}
-
 // 当前读到哪一条的基准线：内容区顶端的留白之外再下移一点，首条消息恰好压线时高亮不会来回跳
 const ACTIVE_LINE_OFFSET = 20;
 
@@ -478,13 +468,6 @@ function scrollParentOf(el) {
 // 动画整段被吞掉，所以这里不做过渡动画；容器关系不明时才退回 scrollIntoView
 function jumpTo(entry) {
     jumpToKey(entry.key, entry.el, entry.key);
-}
-
-// 跳到对应回答：高亮仍落在提问条目上，导航表示的是「当前读到哪一问」
-function jumpToReply(entry) {
-    const reply = selectedReply(entry);
-    if (!reply) return;
-    jumpToKey(reply.key, reply.el, entry.key, true);
 }
 
 function jumpToKey(key, el, activeKey, reply = false, retry = true) {
@@ -653,7 +636,8 @@ function updateActive() {
     let key = state.entries[0].key;
 
     for (const entry of state.entries) {
-        const candidates = entry.replies.length > 1 ? [entry, ...entry.replies] : [entry];
+        // 所有回答都占一行子条目：滚到哪条回答就高亮哪条，并展开它所在的提问
+        const candidates = [entry, ...entry.replies];
         for (const item of candidates) {
             // 只认当前挂载着的块：滚动时每条都去查一次 DOM 会把长会话拖慢，
             // 重新挂载的条目由下一次刷新补回 el
@@ -667,22 +651,24 @@ function updateActive() {
     setActive(key);
 }
 
+// 找到某条回答所属的提问：滚动到回答时用它自动展开分组
+function entryOfReply(key) {
+    return state.entries.find(entry => entry.replies.some(reply => reply.key === key)) || null;
+}
+
 function setActive(key) {
     if (state.activeKey === key) return;
     state.activeKey = key;
+
+    // 当前读到的是回答：把它所在的提问自动展开，面板和横线都能看到这一条
+    const owner = entryOfReply(key);
+    if (owner) setEntryExpanded(owner.key, true);
 
     state.rows.forEach(row => {
         const active = row.dataset.key === key;
         row.classList.toggle('is-active', active);
 
-        // 当前条目与非当前条目的点击语义不同（切换预览 / 只跳转），无障碍文案跟着换
-        const entry = state.entries.find(item => item.key === row.dataset.key);
-        const jump = row.querySelector('.dscf-msgnav-jump');
-        if (entry && jump) {
-            jump.setAttribute('aria-label', jumpActionLabel(entry, row.classList.contains('is-showing-answer'), active));
-        }
-
-        // 悬停展开时把当前项滚进可见范围，列表比胶囊高也不用自己找
+        // 展开面板时把当前项滚进可见范围，列表比胶囊高也不用自己找
         if (active && state.root && state.root.matches(':hover')) {
             row.scrollIntoView({ block: 'nearest' });
         }
@@ -765,20 +751,10 @@ function trackNavHover(event) {
     state.root.classList.toggle('is-open', navPointInside(event.clientX, event.clientY));
 }
 
-// 提问/回答图标：内联 SVG，不依赖 Font Awesome（其他站点不加载图标字体）。
-// 提问是圆圈问号，回答是带正文线的气泡，14px 下也能一眼分开
-const QUESTION_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">'
-    + '<circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.4"/>'
-    + '<path d="M6.1 6.2a1.9 1.9 0 1 1 2.6 1.8c-.45.2-.7.5-.7 1v.2" fill="none"'
-    + ' stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>'
-    + '<circle cx="8" cy="11.1" r=".75" fill="currentColor"/>'
-    + '</svg>';
-
-const ANSWER_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">'
-    + '<path d="M3.1 3.2h9.8a1.2 1.2 0 0 1 1.2 1.2v5.1a1.2 1.2 0 0 1-1.2 1.2H7.6L4.6 13.2v-2.5H3.1a1.2 1.2 0 0 1-1.2-1.2V4.4a1.2 1.2 0 0 1 1.2-1.2Z"'
-    + ' fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>'
-    + '<path d="M4.8 6h6.4M4.8 8.1h4.3" fill="none" stroke="currentColor"'
-    + ' stroke-width="1.3" stroke-linecap="round"/>'
+// [导航展开标记]：提问行行首的折叠箭头，展开回答时转向下；内联 SVG 不依赖图标字体
+const CARET_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">'
+    + '<path d="M6.2 3.6 10.6 8l-4.4 4.4" fill="none" stroke="currentColor"'
+    + ' stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>'
     + '</svg>';
 
 const CLOSE_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">'
@@ -795,62 +771,39 @@ const GRIP_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"
     + '</g>'
     + '</svg>';
 
-// 行内预览在提问和回答之间切换：文字右侧「提问 / 回答」两个按钮始终并排，
-// 当前预览的一侧全亮、另一侧变淡，位置不随模式变化
-function isShowingAnswer(entry) {
-    return Boolean(entry.replies.length) && state.answerPreview.has(entry.key);
+// 提问行的无障碍文案：有没有回答、当前是否展开，决定点击后是跳转还是也收起
+function jumpLabel(entry, expanded) {
+    const text = entry.text || '（无正文）';
+    if (!entry.replies.length) return '跳到提问：' + text;
+    return (expanded
+        ? '收起回答并跳到提问：'
+        : '展开 ' + entry.replies.length + ' 条回答并跳到提问：') + text;
 }
 
-function previewLabel(entry, showingAnswer) {
-    const reply = selectedReply(entry);
-    const text = showingAnswer && reply ? reply.text : entry.text;
-    return (showingAnswer ? '跳到回答：' : '跳到提问：') + (text || '（无正文）');
-}
-
-// 正文区点击：当前条目才在提问/回答之间切换，非当前条目只跳到它当前的预览侧；
-// 无障碍文案据此标明点击后落点，回答未出现时只能跳回提问
-function jumpActionLabel(entry, showingAnswer, active) {
-    if (!active) return previewLabel(entry, showingAnswer);
-    return previewLabel(entry, entry.replies.length ? !showingAnswer : false);
-}
-
-// 模式切换只更新这一行，不整列重画；文字宽度由样式里的 flex-grow 过渡完成收缩/展开
-function applyAnswerPreview(entry, showingAnswer) {
-    const row = state.rowsByKey.get(entry.key);
-    if (!row) return;
-
-    row.classList.toggle('is-showing-answer', showingAnswer);
-
-    // 按钮位置不动，只用 aria-pressed 标明当前预览的是哪一侧
-    const questionRole = row.querySelector('.dscf-msgnav-role-question');
-    const answerRole = row.querySelector('.dscf-msgnav-role-answer');
-    questionRole?.setAttribute('aria-pressed', String(!showingAnswer));
-    answerRole?.setAttribute('aria-pressed', String(showingAnswer));
-
-    const jump = row.querySelector('.dscf-msgnav-jump');
-    jump?.setAttribute('aria-label', jumpActionLabel(entry, showingAnswer, row.classList.contains('is-active')));
-}
-
-// 点提问/回答按钮：切到该侧预览并跳到对应消息；回答还没出现时答按钮不可用
-function switchPreview(entry, showingAnswer) {
-    if (showingAnswer && !entry.replies.length) return;
-    if (showingAnswer) {
-        state.answerPreview.add(entry.key);
+// 展开态按提问 key 记，点击提问切换；分组 class 与无障碍文案一起更新，不整列重画
+function setEntryExpanded(key, expanded) {
+    if (expanded) {
+        state.expanded.add(key);
     } else {
-        state.answerPreview.delete(entry.key);
+        state.expanded.delete(key);
     }
 
-    applyAnswerPreview(entry, showingAnswer);
-    if (showingAnswer) {
-        jumpToReply(entry);
-    } else {
-        jumpTo(entry);
+    const group = state.groupsByKey.get(key);
+    group?.classList.toggle('is-expanded', expanded);
+    // 展开后卡片变高，靠近视口下沿时把它拉回可视范围（不改用户拖拽的锚点比例）
+    if (expanded) keepNavInView();
+
+    const entry = state.entries.find(item => item.key === key);
+    const jump = state.rowsByKey.get(key)?.querySelector('.dscf-msgnav-jump');
+    if (entry && jump) {
+        jump.setAttribute('aria-label', jumpLabel(entry, expanded));
+        jump.setAttribute('aria-expanded', String(expanded));
     }
 }
 
-// 重画条目：按 key 复用已有行、只换内容，不在悬停中整列删除重建——
+// 重画条目：按 key 复用已有行、只换内容，不在交互中整列删除重建——
 // 站点重渲染触发刷新时，鼠标停着也不会丢 hover、面板不会反复收起。
-// 每个提问连同它的回答子条目包成一组：子条目默认在样式里折叠，悬停整组或组内为当前条目时展开，
+// 每个提问连同它的回答行编成一组：回答行默认折叠，点击提问才展开，
 // 连续多条提问各占一行、各自折叠自己的回答
 function renderItems() {
     ensureDom();
@@ -893,16 +846,15 @@ function renderItems() {
 
         const members = [row];
 
-        // 一个提问下有多条独立回答时，每条回答单独占一行子条目（默认折叠在提问行下）
-        if (entry.replies.length > 1) {
-            entry.replies.forEach((reply, index) => {
-                const replyRow = state.rowsByKey.get(reply.key) || document.createElement('div');
-                fillReplyRow(replyRow, entry, reply, index);
-                members.push(replyRow);
-            });
-        }
+        // 所有回答都单独占一行子条目，缩进折叠在提问行下
+        entry.replies.forEach((reply, index) => {
+            const replyRow = state.rowsByKey.get(reply.key) || document.createElement('div');
+            fillReplyRow(replyRow, entry, reply, index);
+            members.push(replyRow);
+        });
 
         fillGroup(group, members);
+        group.classList.toggle('is-expanded', state.expanded.has(entry.key));
         placeGroup(group);
     });
 
@@ -921,37 +873,33 @@ function renderItems() {
 }
 
 function fillItemRow(row, entry) {
-    const showingAnswer = isShowingAnswer(entry);
-    const reply = selectedReply(entry);
     const active = entry.key === state.activeKey;
+    const expandable = entry.replies.length > 0;
+    const expanded = expandable && state.expanded.has(entry.key);
 
-    // 行本身是容器：非当前条目的正文区点击只跳过去，当前条目才切换提问/回答预览；
-    // 行首并排提问/回答两个按钮，按钮不能互相嵌套
+    // 行本身是容器：点击整行展开/收起该提问的回答并跳过去；
+    // 行首箭头只做提示，不单独接事件，避免在箭头上留死区
     row.className = 'dscf-msgnav-item';
     row.classList.toggle('is-active', active);
-    row.classList.toggle('is-showing-answer', showingAnswer);
     row.dataset.key = entry.key;
     delete row.dataset.parentKey;
+
+    const caret = document.createElement('span');
+    caret.className = 'dscf-msgnav-caret';
+    caret.setAttribute('aria-hidden', 'true');
+    if (expandable) caret.innerHTML = CARET_ICON;
 
     const jump = document.createElement('button');
     jump.type = 'button';
     jump.className = 'dscf-msgnav-jump';
-    jump.setAttribute('aria-label', jumpActionLabel(entry, showingAnswer, active));
+    jump.setAttribute('aria-label', jumpLabel(entry, expanded));
+    if (expandable) jump.setAttribute('aria-expanded', String(expanded));
 
-    const preview = document.createElement('span');
-    preview.className = 'dscf-msgnav-preview';
-
-    const question = document.createElement('span');
-    question.className = 'dscf-msgnav-text dscf-msgnav-text-question';
-    question.textContent = entry.text || '（无正文）';
-    question.title = entry.text || '';
-
-    const answer = document.createElement('span');
-    answer.className = 'dscf-msgnav-text dscf-msgnav-text-answer';
-    answer.textContent = reply ? reply.text || '（无正文）' : '（还没有回答）';
-    answer.title = reply ? reply.text || '' : '';
-
-    preview.append(question, answer);
+    const text = document.createElement('span');
+    text.className = 'dscf-msgnav-text';
+    text.textContent = entry.text || '（无正文）';
+    text.title = entry.text || '';
+    jump.append(text);
 
     const indicator = document.createElement('span');
     indicator.className = 'dscf-msgnav-indicator';
@@ -959,93 +907,36 @@ function fillItemRow(row, entry) {
     line.className = 'dscf-msgnav-line';
     indicator.append(line);
 
-    jump.append(preview);
+    row.replaceChildren(caret, jump, indicator);
 
-    // 行首放提问/回答开关，和行尾的横线分居两端：提问在左、回答紧挨着它，切换预览时只换滑块位置
-    const roles = document.createElement('span');
-    roles.className = 'dscf-msgnav-roles';
-    const questionRole = document.createElement('button');
-    questionRole.type = 'button';
-    questionRole.className = 'dscf-msgnav-role dscf-msgnav-role-question';
-    questionRole.title = '查看提问预览';
-    questionRole.setAttribute('aria-label', questionRole.title);
-    questionRole.setAttribute('aria-pressed', String(!showingAnswer));
-    questionRole.innerHTML = QUESTION_ICON;
-    questionRole.addEventListener('click', () => switchPreview(entry, false));
-
-    const answerRole = document.createElement('button');
-    answerRole.type = 'button';
-    answerRole.className = 'dscf-msgnav-role dscf-msgnav-role-answer';
-    answerRole.disabled = !entry.replies.length;
-    answerRole.title = entry.replies.length ? '查看回答预览' : '还没有回答';
-    answerRole.setAttribute('aria-label', answerRole.title);
-    answerRole.setAttribute('aria-pressed', String(showingAnswer));
-    answerRole.innerHTML = ANSWER_ICON;
-    if (entry.replies.length) answerRole.addEventListener('click', () => switchPreview(entry, true));
-
-    roles.append(questionRole, answerRole);
-
-    row.replaceChildren(roles, jump, indicator);
-
-    // 整行都是命中区：开关、正文、最右侧的横线。横线只是装饰元素，
-    // 点击挂在行上才不会在横线那 16px 上留死区。点非当前条目只跳过去、保持它已有的
-    // 预览侧；点当前条目才在提问/回答之间切换，回答未出现时只能跳回提问
-    row.onclick = event => {
-        // 开关那一段有自己的语义，在它们身上点完就不再当成行点击
-        if (event.target.closest('.dscf-msgnav-roles')) return;
-        if (entry.key !== state.activeKey) {
-            if (isShowingAnswer(entry)) {
-                jumpToReply(entry);
-            } else {
-                jumpTo(entry);
-            }
-        } else if (entry.replies.length) {
-            switchPreview(entry, !isShowingAnswer(entry));
-        } else {
-            jumpTo(entry);
-        }
+    // 整行都是命中区（正文、箭头、最右侧横线）：点提问先切换子回答展开态，再跳到该提问
+    row.onclick = () => {
+        if (expandable) setEntryExpanded(entry.key, !state.expanded.has(entry.key));
+        jumpTo(entry);
     };
 }
 
-// 子条目：一条独立回答。行首是回答按钮 + 序号（同一提问的第几条），点击切到这条回答并跳过去
+// 子条目：一条回答，行首序号标明同一提问下的第几条；点击展开所在提问并跳到这条回答
 function fillReplyRow(row, entry, reply, index) {
-    row.className = 'dscf-msgnav-item is-sub is-showing-answer';
+    row.className = 'dscf-msgnav-item is-sub';
     row.classList.toggle('is-active', reply.key === state.activeKey);
     row.dataset.key = reply.key;
     row.dataset.parentKey = entry.key;
 
-    const roles = document.createElement('span');
-    roles.className = 'dscf-msgnav-roles';
-
-    // 每条回答都带自己的回答按钮：和父行的回答开关同一个图标，点了就切到这一条
-    const answerRole = document.createElement('button');
-    answerRole.type = 'button';
-    answerRole.className = 'dscf-msgnav-role dscf-msgnav-role-answer';
-    answerRole.title = '跳到这条回答';
-    answerRole.setAttribute('aria-label', '跳到第 ' + (index + 1) + ' 条回答：' + (reply.text || '（无正文）'));
-    answerRole.setAttribute('aria-pressed', 'true');
-    answerRole.innerHTML = ANSWER_ICON;
-    answerRole.addEventListener('click', () => openReply(entry, reply));
-
     const order = document.createElement('span');
     order.className = 'dscf-msgnav-subindex';
     order.textContent = String(index + 1);
-
-    roles.append(answerRole, order);
 
     const jump = document.createElement('button');
     jump.type = 'button';
     jump.className = 'dscf-msgnav-jump';
     jump.setAttribute('aria-label', '跳到第 ' + (index + 1) + ' 条回答：' + (reply.text || '（无正文）'));
 
-    const preview = document.createElement('span');
-    preview.className = 'dscf-msgnav-preview';
-    const answer = document.createElement('span');
-    answer.className = 'dscf-msgnav-text dscf-msgnav-text-answer';
-    answer.textContent = reply.text || '（无正文）';
-    answer.title = reply.text || '';
-    preview.append(answer);
-    jump.append(preview);
+    const text = document.createElement('span');
+    text.className = 'dscf-msgnav-text';
+    text.textContent = reply.text || '（无正文）';
+    text.title = reply.text || '';
+    jump.append(text);
 
     const indicator = document.createElement('span');
     indicator.className = 'dscf-msgnav-indicator';
@@ -1053,20 +944,14 @@ function fillReplyRow(row, entry, reply, index) {
     line.className = 'dscf-msgnav-line';
     indicator.append(line);
 
-    row.replaceChildren(roles, jump, indicator);
+    row.replaceChildren(order, jump, indicator);
 
-    // 选中这条回答：父行跟着切到回答预览，跳转和光晕都落在这一条上
-    row.onclick = event => {
-        if (event.target.closest('.dscf-msgnav-roles')) return;
-        openReply(entry, reply);
-    };
+    row.onclick = () => openReply(entry, reply);
 }
 
-// 把某条回答设为该提问的当前回答，并跳过去
+// 点击回答行：展开它所在的提问，并跳到这条回答（高亮落在回答行上）
 function openReply(entry, reply) {
-    state.answerReply.set(entry.key, reply.key);
-    state.answerPreview.add(entry.key);
-    applyAnswerPreview(entry, true);
+    setEntryExpanded(entry.key, true);
     jumpToKey(reply.key, reply.el, reply.key, true);
 }
 
@@ -1074,33 +959,28 @@ function openReply(entry, reply) {
 function syncEntryTexts() {
     const entryByKey = new Map(state.entries.map(entry => [entry.key, entry]));
     const replyByKey = new Map();
-    state.entries.forEach(entry => entry.replies.forEach(reply => replyByKey.set(reply.key, reply)));
+    state.entries.forEach(entry => entry.replies.forEach((reply, index) => {
+        replyByKey.set(reply.key, { reply, index });
+    }));
 
     state.rows.forEach(row => {
         const entry = entryByKey.get(row.dataset.key);
         if (entry) {
-            const reply = selectedReply(entry);
-            setRowText(row.querySelector('.dscf-msgnav-text-question'), entry.text, '（无正文）');
-            setRowText(row.querySelector('.dscf-msgnav-text-answer'), reply ? reply.text : '', '（还没有回答）');
-
+            setRowText(row.querySelector('.dscf-msgnav-text'), entry.text, '（无正文）');
             const jump = row.querySelector('.dscf-msgnav-jump');
             if (jump) {
-                jump.setAttribute('aria-label', jumpActionLabel(
-                    entry,
-                    row.classList.contains('is-showing-answer'),
-                    row.classList.contains('is-active')
-                ));
+                jump.setAttribute('aria-label', jumpLabel(entry, state.expanded.has(entry.key)));
             }
             return;
         }
 
-        const reply = replyByKey.get(row.dataset.key);
-        if (!reply) return;
-        setRowText(row.querySelector('.dscf-msgnav-text-answer'), reply.text, '（无正文）');
+        const found = replyByKey.get(row.dataset.key);
+        if (!found) return;
+        const { reply, index } = found;
+        setRowText(row.querySelector('.dscf-msgnav-text'), reply.text, '（无正文）');
         const jump = row.querySelector('.dscf-msgnav-jump');
         if (jump) {
-            const label = '跳到回答：' + (reply.text || '（无正文）');
-            jump.setAttribute('aria-label', label);
+            jump.setAttribute('aria-label', '跳到第 ' + (index + 1) + ' 条回答：' + (reply.text || '（无正文）'));
         }
     });
 }
@@ -1333,7 +1213,7 @@ function clearMessageNav() {
     state.signature = '';
     state.activeKey = null;
     state.topInset = 0;
-    state.answerPreview.clear();
+    state.expanded.clear();
     state.rows.forEach(row => row.remove());
     state.groups.forEach(group => group.remove());
     state.rows = [];
@@ -1351,8 +1231,7 @@ function resetDiscovery() {
     state.entries = [];
     state.signature = '';
     state.activeKey = null;
-    state.answerPreview.clear();
-    state.answerReply.clear();
+    state.expanded.clear();
     // 新会话重新从「未展示」开始；先不急着收起面板，等这次刷新读到新会话的消息再定，
     // 免得地址栏一变就先隐一下再出现
     state.shown = false;
@@ -1497,14 +1376,15 @@ export function teardownMessageNav() {
     state.bar = null;
     state.rows = [];
     state.rowsByKey = new Map();
+    state.groups = [];
+    state.groupsByKey = new Map();
     state.entries = [];
     state.items = [];
     state.itemsByKey = new Map();
     state.activeKey = null;
     state.signature = '';
     state.topInset = 0;
-    state.answerPreview.clear();
-    state.answerReply.clear();
+    state.expanded.clear();
     identity = createIdentity();
     state.dismissed = false;
     state.shown = false;

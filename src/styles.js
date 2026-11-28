@@ -174,9 +174,6 @@ export function addCSSClass() {
             --dscf-nav-line: rgba(0, 0, 0, 0.16);
             --dscf-nav-divider: rgba(0, 0, 0, 0.08);
             --dscf-nav-active: #3964fe;
-            --dscf-nav-switch: rgba(0, 0, 0, 0.06);
-            --dscf-nav-thumb: #ffffff;
-            --dscf-nav-thumb-shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
             position: fixed;
             top: 50%;
             right: 16px;
@@ -361,54 +358,32 @@ export function addCSSClass() {
             cursor: pointer;
         }
 
-        /* 行首的提问/回答开关：两枚图标同处一条胶囊形轨道，选中侧浮起成白色滑块，
-           形状和分段开关一致；与行尾横线分居两端，收起时整条轨道随文字一起透明 */
-        .dscf-msgnav-roles {
-            flex: 0 0 auto;
-            display: inline-flex;
-            align-items: center;
-            gap: 0;
-            padding: 2px;
-            border-radius: 999px;
-            background-color: transparent;
-            transition: background-color 0.2s ease;
-        }
-
-        .dscf-msgnav-role {
-            flex: 0 0 18px;
+        /* [导航展开标记]: 提问行行首的折叠箭头，有回答才显示；展开后转向下。
+            无回答的提问也保留同宽空位，所有提问正文对齐 */
+        .dscf-msgnav-caret {
+            flex: 0 0 14px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 18px;
-            height: 18px;
-            padding: 0;
-            border: 0;
-            border-radius: 999px;
-            background: transparent;
+            width: 14px;
             color: var(--dscf-nav-title);
-            cursor: pointer;
             opacity: 0;
-            transition: opacity 0.1s ease, color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+            transition: transform 0.15s ease, opacity 0.1s ease, color 0.2s ease;
         }
 
-        .dscf-msgnav-role svg {
+        .dscf-msgnav-caret svg {
             display: block;
-            width: 12px;
-            height: 12px;
+            width: 10px;
+            height: 10px;
         }
 
-        /* 预览文字：提问和回答叠在同一个位置，宽度靠 flex-grow 一收一放；
-           同时只显示当前预览的那一侧，切换时像标题收缩、另一侧展开 */
-        .dscf-msgnav-preview {
-            flex: 1 1 auto;
-            min-width: 0;
-            display: flex;
-            align-items: center;
-            overflow: hidden;
+        .dscf-msgnav-group.is-expanded .dscf-msgnav-caret {
+            transform: rotate(90deg);
         }
 
+        /* 正文一行一条消息：提问显示提问、回答行显示该条回答；收起成横线时只留横线 */
         .dscf-msgnav-text {
-            flex: 0 0 0;
+            flex: 1 1 auto;
             min-width: 0;
             font-size: 13px;
             line-height: 20px;
@@ -417,48 +392,24 @@ export function addCSSClass() {
             text-overflow: ellipsis;
             color: var(--dscf-nav-title);
             opacity: 0;
-            transition: flex-grow 0.18s ease, opacity 0.18s ease, color 0.2s ease;
+            transition: opacity 0.18s ease, color 0.2s ease;
         }
 
-        /* 展开列表（悬停或键盘聚焦）时，只让当前预览侧从 0 宽度长到整行 */
-        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-item:not(.is-showing-answer) .dscf-msgnav-text-question,
-        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-item.is-showing-answer .dscf-msgnav-text-answer {
-            flex-grow: 1;
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-text {
             opacity: 1;
         }
 
-        /* 展开时露出开关轨道，两个图标一起露面：选中侧是浮起的白色滑块 + 品牌色图标，
-           未选中侧压到 0.4 亮度，滑块位置随预览侧在左右两格之间切换 */
-        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-roles {
-            background-color: var(--dscf-nav-switch);
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-caret {
+            opacity: 0.55;
         }
 
-        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-role {
-            opacity: 0.4;
-        }
-
-        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-item:not(.is-showing-answer) .dscf-msgnav-role-question,
-        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-item.is-showing-answer .dscf-msgnav-role-answer {
-            opacity: 1;
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-item.is-active .dscf-msgnav-caret {
             color: var(--dscf-nav-active);
-            background-color: var(--dscf-nav-thumb);
-            box-shadow: var(--dscf-nav-thumb-shadow);
-        }
-
-        /* 悬停未选中侧：只提亮图标，滑块仍由上面的规则固定 */
-        .dscf-msgnav:hover .dscf-msgnav-role:hover,
-        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-role:focus-visible {
             opacity: 1;
-            color: var(--dscf-nav-hover);
         }
 
-        /* 回答还没出现：答按钮不占位，问按钮旁边只留它自己 */
-        .dscf-msgnav-role:disabled {
-            display: none;
-        }
-
-        /* [导航条目分组]：一个提问连同它的回答子条目编成一组；多条回答默认折叠，
-            展开面板后悬停整组（父行或子条目）或该组是当前条目时才展开，指针移开即收起。
+        /* [导航条目分组]：每个提问连同它的回答行编成一组；回答行缩进、默认折叠，
+            点击提问展开/收起（滚动到某条回答时会自动展开它所在的提问）。
             收起成横线时不展开子条目，避免列表高度随滚动变化；连续多条提问仍各自一行 */
         .dscf-msgnav-group {
             display: flex;
@@ -469,36 +420,31 @@ export function addCSSClass() {
             display: none;
         }
 
-        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-group:is(:hover, :focus-within, :has(> .dscf-msgnav-item.is-active)) > .dscf-msgnav-item.is-sub {
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-group.is-expanded > .dscf-msgnav-item.is-sub {
             display: flex;
         }
 
-        /* 收起时子条目不展开，当前读到某条回答就让它的提问行接管横线高亮，位置仍有指示 */
+        /* 分组折叠时若当前读到它的某条回答，让提问行接管横线高亮：
+           收起成横线时看不到子条目，手动收起的分组也不该丢掉位置指示 */
+        .dscf-msgnav-group:not(.is-expanded):has(> .dscf-msgnav-item.is-sub.is-active) > .dscf-msgnav-item:not(.is-sub) .dscf-msgnav-line,
         .dscf-msgnav:not(:hover):not(.is-open):not(.is-flying) .dscf-msgnav-group:has(> .dscf-msgnav-item.is-sub.is-active) > .dscf-msgnav-item:not(.is-sub) .dscf-msgnav-line {
             background-color: var(--dscf-nav-active);
             transform: scale(1.5);
         }
 
-        /* 一个提问下有多条独立回答时，每条回答单独占一行子条目：
-           行首是序号（不是按钮，悬停才显形），文字直接显示该条回答的预览，
-           点击切到这条回答并跳过去；行高比父条目矮一档，视觉上从属于上一问 */
+        /* 回答子条目：行首序号标明同一提问下的第几条，文字缩进一级、比提问矮一档，
+           点击跳到这条回答 */
         .dscf-msgnav-item.is-sub {
             height: 24px;
         }
 
         .dscf-msgnav-item.is-sub .dscf-msgnav-jump {
-            padding-left: 14px;
+            padding-left: 24px;
         }
 
         .dscf-msgnav-item.is-sub .dscf-msgnav-text {
             font-size: 12px;
             line-height: 18px;
-        }
-
-        .dscf-msgnav-item.is-sub .dscf-msgnav-roles {
-            gap: 2px;
-            padding: 0;
-            background-color: transparent;
         }
 
         .dscf-msgnav-subindex {
@@ -546,13 +492,13 @@ export function addCSSClass() {
             transition: background-color 0.2s ease, transform 0.2s ease;
         }
 
-        /* 悬停条目：预览文字、图标和横线一起提到正文色 */
+        /* 悬停条目：正文、箭头和横线一起提到正文色 */
         .dscf-msgnav-item:hover .dscf-msgnav-line {
             background-color: var(--dscf-nav-hover);
         }
 
         .dscf-msgnav-item:hover .dscf-msgnav-text,
-        .dscf-msgnav-item:hover .dscf-msgnav-role {
+        .dscf-msgnav-item:hover .dscf-msgnav-caret {
             color: var(--dscf-nav-hover);
         }
 
@@ -564,12 +510,6 @@ export function addCSSClass() {
         .dscf-msgnav-item.is-active .dscf-msgnav-text {
             color: var(--dscf-nav-active);
             font-weight: 500;
-        }
-
-        /* 当前条目上，只有正在预览的一侧图标跟随品牌色 */
-        .dscf-msgnav-item.is-active:not(.is-showing-answer) .dscf-msgnav-role-question,
-        .dscf-msgnav-item.is-active.is-showing-answer .dscf-msgnav-role-answer {
-            color: var(--dscf-nav-active);
         }
 
         /* 深色主题：各站点标记不同（ChatGPT/Grok 用 html.dark，DeepSeek 用 body.dark，
@@ -585,9 +525,6 @@ export function addCSSClass() {
             --dscf-nav-line: rgba(255, 255, 255, 0.2);
             --dscf-nav-divider: rgba(255, 255, 255, 0.08);
             --dscf-nav-active: #679efe;
-            --dscf-nav-switch: rgba(255, 255, 255, 0.1);
-            --dscf-nav-thumb: #4a4a4e;
-            --dscf-nav-thumb-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
         }
 
         /* 跳转目标的气泡边缘发光：只画光圈不铺底色，正文颜色不受影响。
