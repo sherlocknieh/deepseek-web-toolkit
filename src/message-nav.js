@@ -186,7 +186,7 @@ const state = {
     answerPreview: new Set(),
     // 用户点了关闭图标：只隐藏本次页面的导航，刷新后重新识别即恢复
     dismissed: false,
-    // 顶栏拖动后的吸附边与顶边像素；null 表示保持默认的右侧垂直居中
+    // 顶栏拖动后的吸附边与纵向比例（卡片顶边 / 视口高）；null 表示保持默认的右侧垂直居中
     position: null,
     // 正在拖动时的指针偏移、卡片坐标与是否越过阈值
     drag: null,
@@ -799,21 +799,32 @@ function syncVisibility() {
     );
 }
 
-// 位置只存吸附边与顶边像素；读不出或损坏时退回默认的右侧垂直居中
+// 位置存吸附边与纵向比例；比例以视口高度为分母，手机版/电脑版切换、横竖屏旋转、
+// 窗口缩放后按同一比例还原。旧版只存像素顶边，读到时按当前视口折成比例
 function readNavPosition() {
     const raw = storageGet(NAV_POSITION_KEY, '');
     if (!raw) return null;
     try {
         const parsed = JSON.parse(raw);
-        if (!parsed || !Number.isFinite(parsed.top)) return null;
-        return { side: parsed.side === 'left' ? 'left' : 'right', top: parsed.top };
+        if (!parsed) return null;
+        const side = parsed.side === 'left' ? 'left' : 'right';
+        const ratio = Number.isFinite(parsed.ratio)
+            ? parsed.ratio
+            : (Number.isFinite(parsed.top) ? topToRatio(parsed.top) : NaN);
+        if (!Number.isFinite(ratio)) return null;
+        return { side, ratio: Math.min(1, Math.max(0, ratio)) };
     } catch (e) {
         return null;
     }
 }
 
 function saveNavPosition() {
-    if (state.position) storageSet(NAV_POSITION_KEY, JSON.stringify(state.position));
+    if (state.position) {
+        storageSet(NAV_POSITION_KEY, JSON.stringify({
+            side: state.position.side,
+            ratio: state.position.ratio
+        }));
+    }
 }
 
 // 卡片（展开后的 240 宽面板）横向夹在视口内；拖动与飞行都以卡片左侧坐标为基准
@@ -822,10 +833,20 @@ function clampNavLeft(left) {
     return Math.min(Math.max(0, left), Math.max(0, window.innerWidth - width));
 }
 
-// 顶边同样夹在视口内：条目变多或窗口变矮时把导航按回来，不让它跑出屏幕
+// 卡片可移动的纵向范围由卡片高度决定：顶边 0（贴顶）到「视口高 - 卡片高」（贴底）
 function clampNavTop(top) {
     const height = state.root?.getBoundingClientRect().height || 0;
     return Math.min(Math.max(0, top), Math.max(0, window.innerHeight - height));
+}
+
+// 位置以视口高度为分母存比例（百分比定位），换算后再夹回可移动范围；
+// 分母不随卡片高度变，所以条目增减不会让面板自己漂移
+function topToRatio(top) {
+    return window.innerHeight ? Math.min(1, Math.max(0, top / window.innerHeight)) : 0;
+}
+
+function ratioToTop(ratio) {
+    return clampNavTop(Math.min(1, Math.max(0, ratio)) * window.innerHeight);
 }
 
 // 按卡片坐标摆位置：右侧吸附时列表从 34px 胶囊向左溢出，左侧吸附则向右展开；
@@ -844,26 +865,40 @@ function positionNavCard(side, cardLeft, cardTop) {
     root.style.top = `${cardTop}px`;
 }
 
-// 静止态：吸附边用 class 切换镜像布局；inline 只写顶边与左右边距，默认的居中偏移随之取消
-function applyNavPosition(position) {
-    state.position = position;
-    if (!state.root) return;
-
-    const left = position.side === 'left';
-    state.root.classList.toggle('is-left', left);
-    state.root.style.top = `${position.top}px`;
-    state.root.style.transform = 'none';
+// 静止态的摆放：吸附边贴 16px 边距，顶边显式写死，默认的垂直居中偏移随之取消
+function layoutNavCard(side, top) {
+    const root = state.root;
+    if (!root) return;
+    const left = side === 'left';
+    root.classList.toggle('is-left', left);
+    root.style.top = `${top}px`;
+    root.style.transform = 'none';
     // 边距与样式里的 16px 保持一致
-    state.root.style.left = left ? `${NAV_EDGE}px` : 'auto';
-    state.root.style.right = left ? 'auto' : `${NAV_EDGE}px`;
+    root.style.left = left ? `${NAV_EDGE}px` : 'auto';
+    root.style.right = left ? 'auto' : `${NAV_EDGE}px`;
 }
 
+// 按存储的比例摆位置；比例是锚点，条目增减与视口缩放都以它为准
+function applyNavPosition(position) {
+    state.position = position;
+    layoutNavCard(position.side, ratioToTop(position.ratio));
+}
+
+// 条目变多后卡片变高，可能顶出屏幕下沿：只纠正视觉位置，不改锚点比例，
+// 换回大视口（切回电脑版、横屏）时仍回到用户拖到的相对位置
 function keepNavInView() {
-    if (!state.position || state.drag || state.flyTimer) return;
-    const top = clampNavTop(state.position.top);
-    if (top !== state.position.top) {
-        applyNavPosition({ side: state.position.side, top });
-    }
+    if (!state.position || !state.root || state.drag || state.flyTimer) return;
+    const current = parseFloat(state.root.style.top);
+    if (!Number.isFinite(current)) return;
+    const top = clampNavTop(current);
+    if (Math.abs(top - current) < 1) return;
+    layoutNavCard(state.position.side, top);
+}
+
+// 视口自身变化（手机版/电脑版切换、横竖屏、窗口缩放）后按锚点比例整体重摆
+function rescaleNavPosition() {
+    if (!state.position || !state.root || state.drag || state.flyTimer) return;
+    applyNavPosition(state.position);
 }
 
 // 松手后滑向吸附边：先在不带过渡的情况下把卡片摆到当前视觉位置（跨边时内容镜像
@@ -879,7 +914,7 @@ function flyNavTo(side, cardLeft, cardTop) {
     state.root.classList.add('is-flying');
     positionNavCard(side, cardLeft, cardTop);
 
-    state.position = { side, top: cardTop };
+    state.position = { side, ratio: topToRatio(cardTop) };
     saveNavPosition();
 
     clearTimeout(state.flyTimer);
@@ -1074,7 +1109,7 @@ export function initMessageNav() {
     // 位置沿用上次拖到的吸附边与顶边；首次运行保持默认的右侧垂直居中
     const position = readNavPosition();
     if (position) applyNavPosition(position);
-    window.addEventListener('resize', keepNavInView);
+    window.addEventListener('resize', rescaleNavPosition);
 
     state.historyTimer = setInterval(() => {
         if (location.href === state.href) return;
@@ -1091,7 +1126,7 @@ export function initMessageNav() {
 export function teardownMessageNav() {
     detachScroller();
     stopNavDragListeners();
-    window.removeEventListener('resize', keepNavInView);
+    window.removeEventListener('resize', rescaleNavPosition);
 
     clearTimeout(state.refreshTimer);
     state.refreshTimer = null;

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 修复+优化
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.28.1531
+// @version      2026.11.28.1536
 // @author       sherlocknieh
 // @description  优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。
 // @license      MIT
@@ -2490,17 +2490,23 @@
 		if (!raw) return null;
 		try {
 			const parsed = JSON.parse(raw);
-			if (!parsed || !Number.isFinite(parsed.top)) return null;
+			if (!parsed) return null;
+			const side = parsed.side === "left" ? "left" : "right";
+			const ratio = Number.isFinite(parsed.ratio) ? parsed.ratio : Number.isFinite(parsed.top) ? topToRatio(parsed.top) : NaN;
+			if (!Number.isFinite(ratio)) return null;
 			return {
-				side: parsed.side === "left" ? "left" : "right",
-				top: parsed.top
+				side,
+				ratio: Math.min(1, Math.max(0, ratio))
 			};
 		} catch (e) {
 			return null;
 		}
 	}
 	function saveNavPosition() {
-		if (state.position) storageSet(NAV_POSITION_KEY, JSON.stringify(state.position));
+		if (state.position) storageSet(NAV_POSITION_KEY, JSON.stringify({
+			side: state.position.side,
+			ratio: state.position.ratio
+		}));
 	}
 	function clampNavLeft(left) {
 		const width = state.card?.offsetWidth || 0;
@@ -2509,6 +2515,12 @@
 	function clampNavTop(top) {
 		const height = state.root?.getBoundingClientRect().height || 0;
 		return Math.min(Math.max(0, top), Math.max(0, window.innerHeight - height));
+	}
+	function topToRatio(top) {
+		return window.innerHeight ? Math.min(1, Math.max(0, top / window.innerHeight)) : 0;
+	}
+	function ratioToTop(ratio) {
+		return clampNavTop(Math.min(1, Math.max(0, ratio)) * window.innerHeight);
 	}
 	function positionNavCard(side, cardLeft, cardTop) {
 		const root = state.root;
@@ -2520,23 +2532,31 @@
 		root.style.left = side === "left" ? `${cardLeft}px` : `${cardLeft + card.offsetWidth - root.offsetWidth}px`;
 		root.style.top = `${cardTop}px`;
 	}
+	function layoutNavCard(side, top) {
+		const root = state.root;
+		if (!root) return;
+		const left = side === "left";
+		root.classList.toggle("is-left", left);
+		root.style.top = `${top}px`;
+		root.style.transform = "none";
+		root.style.left = left ? `${NAV_EDGE}px` : "auto";
+		root.style.right = left ? "auto" : `${NAV_EDGE}px`;
+	}
 	function applyNavPosition(position) {
 		state.position = position;
-		if (!state.root) return;
-		const left = position.side === "left";
-		state.root.classList.toggle("is-left", left);
-		state.root.style.top = `${position.top}px`;
-		state.root.style.transform = "none";
-		state.root.style.left = left ? `${NAV_EDGE}px` : "auto";
-		state.root.style.right = left ? "auto" : `${NAV_EDGE}px`;
+		layoutNavCard(position.side, ratioToTop(position.ratio));
 	}
 	function keepNavInView() {
-		if (!state.position || state.drag || state.flyTimer) return;
-		const top = clampNavTop(state.position.top);
-		if (top !== state.position.top) applyNavPosition({
-			side: state.position.side,
-			top
-		});
+		if (!state.position || !state.root || state.drag || state.flyTimer) return;
+		const current = parseFloat(state.root.style.top);
+		if (!Number.isFinite(current)) return;
+		const top = clampNavTop(current);
+		if (Math.abs(top - current) < 1) return;
+		layoutNavCard(state.position.side, top);
+	}
+	function rescaleNavPosition() {
+		if (!state.position || !state.root || state.drag || state.flyTimer) return;
+		applyNavPosition(state.position);
 	}
 	function flyNavTo(side, cardLeft, cardTop) {
 		if (!state.root || !state.card) return;
@@ -2548,7 +2568,7 @@
 		positionNavCard(side, cardLeft, cardTop);
 		state.position = {
 			side,
-			top: cardTop
+			ratio: topToRatio(cardTop)
 		};
 		saveNavPosition();
 		clearTimeout(state.flyTimer);
@@ -2698,7 +2718,7 @@
 		ensureDom();
 		const position = readNavPosition();
 		if (position) applyNavPosition(position);
-		window.addEventListener("resize", keepNavInView);
+		window.addEventListener("resize", rescaleNavPosition);
 		state.historyTimer = setInterval(() => {
 			if (location.href === state.href) return;
 			state.href = location.href;
@@ -2711,7 +2731,7 @@
 	function teardownMessageNav() {
 		detachScroller();
 		stopNavDragListeners();
-		window.removeEventListener("resize", keepNavInView);
+		window.removeEventListener("resize", rescaleNavPosition);
 		clearTimeout(state.refreshTimer);
 		state.refreshTimer = null;
 		clearInterval(state.watchTimer);

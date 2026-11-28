@@ -18,7 +18,7 @@ export default defineConfig({
       userscript: {
         name: 'DeepSeek 修复+优化',
         namespace: 'http://tampermonkey.net/',
-        version: '2026.11.28.1531',
+        version: '2026.11.28.1536',
         description: '优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。',
         author: 'sherlocknieh',
         match: [
