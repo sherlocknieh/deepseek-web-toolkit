@@ -578,17 +578,22 @@ function jumpToUnmounted(key, activeKey, reply) {
     }, 400);
 }
 
-// 跳到会话顶部 / 底部（导航顶栏按钮）：和条目跳转一样直接改滚动容器、不做动画；
-// 先解除跳转锁，落点后立即按位置重算高亮，高亮落在首条或末尾已挂载的那条
+// 跳到会话顶部 / 底部（导航顶栏按钮）：和条目跳转一样直接改滚动容器、不做动画。
+// 顶/底各有一个明确目标（首条、末条回答），选中它并锁住高亮——否则底部那几条
+// 没越过基准线，按位置判定会把高亮停在倒数第二条
 function jumpToEdge(where) {
     const scroller = state.scroller;
-    if (!scroller) return;
+    if (!scroller || !state.entries.length) return;
 
-    state.jumpLocked = false;
-    state.awaitScroll = false;
+    const first = state.entries[0];
+    const last = state.entries[state.entries.length - 1];
+    const lastReply = last.replies[last.replies.length - 1];
+    const activeKey = where === 'top' ? first.key : (lastReply ? lastReply.key : last.key);
+
+    lockActiveOnJump();
     const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
     scroller.scrollTop = where === 'top' ? 0 : max;
-    updateActive();
+    setActive(activeKey);
 }
 
 // 无正文时把光晕落到包住图片、自己带圆角的那层容器上，否则方框会盖住图片的圆角

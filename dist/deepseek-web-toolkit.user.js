@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 修复+优化
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.28.1903
+// @version      2026.11.28.1904
 // @author       sherlocknieh
 // @description  优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。
 // @license      MIT
@@ -2397,12 +2397,15 @@
 	}
 	function jumpToEdge(where) {
 		const scroller = state.scroller;
-		if (!scroller) return;
-		state.jumpLocked = false;
-		state.awaitScroll = false;
+		if (!scroller || !state.entries.length) return;
+		const first = state.entries[0];
+		const last = state.entries[state.entries.length - 1];
+		const lastReply = last.replies[last.replies.length - 1];
+		const activeKey = where === "top" ? first.key : lastReply ? lastReply.key : last.key;
+		lockActiveOnJump();
 		const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
 		scroller.scrollTop = where === "top" ? 0 : max;
-		updateActive();
+		setActive(activeKey);
 	}
 	function roundedImageBox(block) {
 		const img = block.querySelector("img");
