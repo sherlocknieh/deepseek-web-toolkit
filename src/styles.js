@@ -189,6 +189,33 @@ export function addCSSClass() {
             display: flex;
         }
 
+        /* [导航顶栏] 吸附左边：列表改为向右展开，条目整体镜像，横线仍贴着屏幕边缘 */
+        .dscf-msgnav.is-left {
+            justify-content: flex-start;
+        }
+
+        .dscf-msgnav.is-left .dscf-msgnav-items {
+            padding: 15px 24px 15px 6px;
+        }
+
+        .dscf-msgnav.is-left .dscf-msgnav-item {
+            flex-direction: row-reverse;
+        }
+
+        .dscf-msgnav.is-left .dscf-msgnav-jump {
+            justify-content: flex-start;
+        }
+
+        .dscf-msgnav.is-left .dscf-msgnav-preview {
+            margin-right: 0;
+            margin-left: 12px;
+        }
+
+        .dscf-msgnav.is-left .dscf-msgnav-roles {
+            margin-right: 0;
+            margin-left: 6px;
+        }
+
         /* 窄屏也让出位置而不是整个隐藏：收起时只是右侧一列 34px 宽的横线，展开是悬停操作，
            压住正文的范围有限，隐藏反而让窄屏用户完全用不到导航 */
 
@@ -199,7 +226,7 @@ export function addCSSClass() {
             flex: 0 0 240px;
             display: flex;
             flex-direction: column;
-            max-height: 292px;
+            max-height: min(322px, calc(100vh - 32px));
             box-sizing: border-box;
             border: 1px solid transparent;
             border-radius: 16px;
@@ -216,12 +243,53 @@ export function addCSSClass() {
             pointer-events: auto;
         }
 
-        /* [导航关闭图标]: 悬浮在面板右上角，只在展开时露面；点击只隐藏本页的导航，
-           刷新后恢复，所以不需要常驻位置或额外恢复入口 */
+        /* [导航顶栏/拖动条]: 展开后压在列表顶部，左端拖动把手、右端隐藏按钮；
+           整条都是拖动区，拖动时保持实色展开，松手按指针所在半屏吸附左右边缘 */
+        .dscf-msgnav-bar {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            height: 30px;
+            padding: 0 6px 0 24px;
+            box-sizing: border-box;
+            cursor: grab;
+            opacity: 0;
+            touch-action: none;
+            transition: opacity 0.1s ease;
+        }
+
+        .dscf-msgnav:hover .dscf-msgnav-bar,
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-bar,
+        .dscf-msgnav.is-dragging .dscf-msgnav-bar {
+            opacity: 1;
+        }
+
+        .dscf-msgnav.is-dragging .dscf-msgnav-bar {
+            cursor: grabbing;
+        }
+
+        /* 拖动时指针会移出胶囊，强制保留展开态，免得列表半路消失 */
+        .dscf-msgnav.is-dragging .dscf-msgnav-list {
+            background-color: var(--dscf-nav-solid);
+            border-color: var(--dscf-nav-border);
+            box-shadow: var(--dscf-nav-shadow);
+            pointer-events: auto;
+        }
+
+        .dscf-msgnav-grip {
+            display: inline-flex;
+            color: var(--dscf-nav-title);
+        }
+
+        .dscf-msgnav-grip svg {
+            display: block;
+            width: 10px;
+            height: 10px;
+        }
+
+        /* [导航关闭图标]: 顶栏右端，点击只隐藏本页的导航（刷新后恢复），不写存储 */
         .dscf-msgnav-close {
-            position: absolute;
-            top: 2px;
-            right: 6px;
+            margin-left: auto;
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -233,8 +301,7 @@ export function addCSSClass() {
             background: transparent;
             color: var(--dscf-nav-title);
             cursor: pointer;
-            opacity: 0;
-            pointer-events: none;
+            opacity: 0.7;
             transition: opacity 0.1s ease, color 0.2s ease, background-color 0.2s ease;
         }
 
@@ -242,12 +309,6 @@ export function addCSSClass() {
             display: block;
             width: 11px;
             height: 11px;
-        }
-
-        .dscf-msgnav:hover .dscf-msgnav-close,
-        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-close {
-            opacity: 0.7;
-            pointer-events: auto;
         }
 
         .dscf-msgnav-close:hover,

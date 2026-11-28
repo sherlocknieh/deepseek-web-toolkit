@@ -1,6 +1,8 @@
 // 跨模块共享的键名与目录缩进
 export const RUNTIME_KEY = '__deepseek_chat_folders_runtime__';
 export const EXPANDED_KEY = 'path_folders_expanded';
+// 通用导航吸附的边与顶边像素（拖动顶栏后写入）
+export const NAV_POSITION_KEY = 'message_nav_position';
 export const BASE_PADDING = 12;
 export const INDENT = 14;
 

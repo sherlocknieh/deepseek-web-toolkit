@@ -1,4 +1,6 @@
 import { runtime } from './runtime.js';
+import { storageGet, storageSet } from './storage.js';
+import { NAV_POSITION_KEY } from './constants.js';
 
 // 通用消息导航：复刻 DeepSeek 原生导航——右侧一颗胶囊收成一列横线，悬停展开提问列表，
 // 点击非当前条目的正文只跳过去、保持它已有的预览侧，点当前条目的正文才在提问/回答之间切换；
@@ -169,7 +171,12 @@ const state = {
     // 当前切成「回答预览」的提问 key；切回提问时移除，列表重画后仍按它恢复模式
     answerPreview: new Set(),
     // 用户点了关闭图标：只隐藏本次页面的导航，刷新后重新识别即恢复
-    dismissed: false
+    dismissed: false,
+    // 顶栏拖动后的吸附边与顶边像素；null 表示保持默认的右侧垂直居中
+    position: null,
+    // 正在拖动时的起始指针、起始顶边与是否越过阈值
+    drag: null,
+    bar: null
 };
 
 // 取消息正文：先按站点收敛到气泡元素，再去掉按钮和工具栏文案后压成单行
@@ -519,11 +526,16 @@ function ensureDom() {
     const list = document.createElement('div');
     list.className = 'dscf-msgnav-list';
 
-    const items = document.createElement('div');
-    items.className = 'dscf-msgnav-items';
-    list.append(items);
+    // [导航顶栏]: 展开后盖在列表上方，左端拖动把手、右端隐藏按钮；
+    // 整条都是拖动区，拖动只改垂直位置，松手按指针所在半屏吸附左右边缘
+    const bar = document.createElement('div');
+    bar.className = 'dscf-msgnav-bar';
 
-    // [导航关闭图标]: 展开时浮在面板右上角，点击只隐藏本次页面的导航（不动识别与监听）
+    const grip = document.createElement('span');
+    grip.className = 'dscf-msgnav-grip';
+    grip.innerHTML = GRIP_ICON;
+
+    // [导航关闭图标]: 顶栏右侧，点击只隐藏本次页面的导航（不动识别与监听）
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'dscf-msgnav-close';
@@ -534,13 +546,20 @@ function ensureDom() {
         state.dismissed = true;
         syncVisibility();
     });
-    list.append(close);
+
+    bar.append(grip, close);
+    bar.addEventListener('pointerdown', startNavDrag);
+
+    const items = document.createElement('div');
+    items.className = 'dscf-msgnav-items';
+    list.append(bar, items);
 
     root.append(list);
     document.body.appendChild(root);
 
     state.root = root;
     state.list = items;
+    state.bar = bar;
 }
 
 // 提问/回答图标：内联 SVG，不依赖 Font Awesome（其他站点不加载图标字体）。
@@ -562,6 +581,15 @@ const ANSWER_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="fals
 const CLOSE_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">'
     + '<path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2" fill="none" stroke="currentColor"'
     + ' stroke-width="1.4" stroke-linecap="round"/>'
+    + '</svg>';
+
+// 顶栏把手：两列三点，提示这一条可以拖
+const GRIP_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">'
+    + '<g fill="currentColor">'
+    + '<circle cx="6" cy="4.5" r="1"/><circle cx="10" cy="4.5" r="1"/>'
+    + '<circle cx="6" cy="8" r="1"/><circle cx="10" cy="8" r="1"/>'
+    + '<circle cx="6" cy="11.5" r="1"/><circle cx="10" cy="11.5" r="1"/>'
+    + '</g>'
     + '</svg>';
 
 // 行内预览在提问和回答之间切换：文字右侧「提问 / 回答」两个按钮始终并排，
@@ -744,6 +772,115 @@ function syncVisibility() {
     );
 }
 
+// 位置只存吸附边与顶边像素；读不出或损坏时退回默认的右侧垂直居中
+function readNavPosition() {
+    const raw = storageGet(NAV_POSITION_KEY, '');
+    if (!raw) return null;
+    try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || !Number.isFinite(parsed.top)) return null;
+        return { side: parsed.side === 'left' ? 'left' : 'right', top: parsed.top };
+    } catch (e) {
+        return null;
+    }
+}
+
+function saveNavPosition() {
+    if (state.position) storageSet(NAV_POSITION_KEY, JSON.stringify(state.position));
+}
+
+// 顶边夹在视口内：条目变多或窗口变矮时把导航按回来，不让它跑出屏幕
+function clampNavTop(top) {
+    const height = state.root?.getBoundingClientRect().height || 0;
+    return Math.min(Math.max(0, top), Math.max(0, window.innerHeight - height));
+}
+
+// 吸附边用 class 切换镜像布局；inline 只写顶边与左右边距，默认的居中偏移随之取消
+function applyNavPosition(position) {
+    state.position = position;
+    if (!state.root) return;
+
+    const left = position.side === 'left';
+    state.root.classList.toggle('is-left', left);
+    state.root.style.top = `${position.top}px`;
+    state.root.style.transform = 'none';
+    // 边距与样式里的 right: 16px 保持一致
+    state.root.style.left = left ? '16px' : 'auto';
+    state.root.style.right = left ? 'auto' : '16px';
+}
+
+function keepNavInView() {
+    if (!state.position) return;
+    const top = clampNavTop(state.position.top);
+    if (top !== state.position.top) {
+        applyNavPosition({ side: state.position.side, top });
+    }
+}
+
+// [导航顶栏] 拖动：按下只记录起点，超过阈值才算拖动；拖动中只改垂直位置，
+// 松手按指针所在半屏吸附左右边缘并写入存储。事件挂到 window，指针移出胶囊也不丢
+function startNavDrag(event) {
+    if (event.button !== 0 || !state.root || !state.bar) return;
+    if (event.target.closest?.('.dscf-msgnav-close')) return;
+
+    state.drag = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        startTop: state.root.getBoundingClientRect().top,
+        moved: false
+    };
+    state.root.classList.add('is-dragging');
+    state.bar.setPointerCapture?.(event.pointerId);
+
+    window.addEventListener('pointermove', moveNavDrag);
+    window.addEventListener('pointerup', endNavDrag);
+    window.addEventListener('pointercancel', endNavDrag);
+    event.preventDefault();
+}
+
+function moveNavDrag(event) {
+    const drag = state.drag;
+    if (!drag || event.pointerId !== drag.pointerId || !state.root) return;
+
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (!drag.moved && Math.hypot(dx, dy) < 3) return;
+
+    drag.moved = true;
+    applyNavPosition({
+        side: state.position?.side === 'left' ? 'left' : 'right',
+        top: clampNavTop(drag.startTop + dy)
+    });
+}
+
+function endNavDrag(event) {
+    const drag = state.drag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+
+    state.drag = null;
+    state.root?.classList.remove('is-dragging');
+    if (state.bar?.hasPointerCapture?.(drag.pointerId)) {
+        state.bar.releasePointerCapture(drag.pointerId);
+    }
+    stopNavDragListeners();
+    if (!drag.moved || !state.root) return;
+
+    // 取消（如系统手势打断）时保持当前吸附边，不按可能为 0 的指针位置重算
+    const side = event.type === 'pointercancel'
+        ? (state.position?.side === 'left' ? 'left' : 'right')
+        : (event.clientX < window.innerWidth / 2 ? 'left' : 'right');
+    const top = clampNavTop(state.root.getBoundingClientRect().top);
+    applyNavPosition({ side, top });
+    saveNavPosition();
+}
+
+function stopNavDragListeners() {
+    window.removeEventListener('pointermove', moveNavDrag);
+    window.removeEventListener('pointerup', endNavDrag);
+    window.removeEventListener('pointercancel', endNavDrag);
+}
+
 function clearMessageNav() {
     detachScroller();
     state.entries = [];
@@ -828,6 +965,7 @@ export function refreshMessageNav() {
     }
 
     syncVisibility();
+    keepNavInView();
     updateActive();
 }
 
@@ -847,6 +985,11 @@ export function initMessageNav() {
     if (state.root) return;
     ensureDom();
 
+    // 位置沿用上次拖到的吸附边与顶边；首次运行保持默认的右侧垂直居中
+    const position = readNavPosition();
+    if (position) applyNavPosition(position);
+    window.addEventListener('resize', keepNavInView);
+
     state.historyTimer = setInterval(() => {
         if (location.href === state.href) return;
         state.href = location.href;
@@ -861,6 +1004,8 @@ export function initMessageNav() {
 
 export function teardownMessageNav() {
     detachScroller();
+    stopNavDragListeners();
+    window.removeEventListener('resize', keepNavInView);
 
     clearTimeout(state.refreshTimer);
     state.refreshTimer = null;
@@ -875,6 +1020,7 @@ export function teardownMessageNav() {
     state.root?.remove();
     state.root = null;
     state.list = null;
+    state.bar = null;
     state.rows = [];
     state.entries = [];
     state.activeKey = null;
@@ -882,6 +1028,8 @@ export function teardownMessageNav() {
     state.topInset = 0;
     state.answerPreview.clear();
     state.dismissed = false;
+    state.position = null;
+    state.drag = null;
 
     if (runtime.refreshMessageNav === refreshMessageNav) {
         runtime.refreshMessageNav = null;

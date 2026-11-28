@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 修复+优化
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.28.1428
+// @version      2026.11.28.1441
 // @author       sherlocknieh
 // @description  优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。
 // @license      MIT
@@ -28,6 +28,7 @@
 	var _unsafeWindow = (() => typeof unsafeWindow != "undefined" ? unsafeWindow : void 0)();
 	var RUNTIME_KEY = "__deepseek_chat_folders_runtime__";
 	var EXPANDED_KEY = "path_folders_expanded";
+	var NAV_POSITION_KEY = "message_nav_position";
 	var HIDDEN_ATTR = "data-dscf-hidden";
 	var CHAT_ATTR = "data-dscf-chat";
 	var previousRuntime = window[RUNTIME_KEY];
@@ -274,6 +275,33 @@
             display: flex;
         }
 
+        /* [导航顶栏] 吸附左边：列表改为向右展开，条目整体镜像，横线仍贴着屏幕边缘 */
+        .dscf-msgnav.is-left {
+            justify-content: flex-start;
+        }
+
+        .dscf-msgnav.is-left .dscf-msgnav-items {
+            padding: 15px 24px 15px 6px;
+        }
+
+        .dscf-msgnav.is-left .dscf-msgnav-item {
+            flex-direction: row-reverse;
+        }
+
+        .dscf-msgnav.is-left .dscf-msgnav-jump {
+            justify-content: flex-start;
+        }
+
+        .dscf-msgnav.is-left .dscf-msgnav-preview {
+            margin-right: 0;
+            margin-left: 12px;
+        }
+
+        .dscf-msgnav.is-left .dscf-msgnav-roles {
+            margin-right: 0;
+            margin-left: 6px;
+        }
+
         /* 窄屏也让出位置而不是整个隐藏：收起时只是右侧一列 34px 宽的横线，展开是悬停操作，
            压住正文的范围有限，隐藏反而让窄屏用户完全用不到导航 */
 
@@ -284,7 +312,7 @@
             flex: 0 0 240px;
             display: flex;
             flex-direction: column;
-            max-height: 292px;
+            max-height: min(322px, calc(100vh - 32px));
             box-sizing: border-box;
             border: 1px solid transparent;
             border-radius: 16px;
@@ -301,12 +329,53 @@
             pointer-events: auto;
         }
 
-        /* [导航关闭图标]: 悬浮在面板右上角，只在展开时露面；点击只隐藏本页的导航，
-           刷新后恢复，所以不需要常驻位置或额外恢复入口 */
+        /* [导航顶栏/拖动条]: 展开后压在列表顶部，左端拖动把手、右端隐藏按钮；
+           整条都是拖动区，拖动时保持实色展开，松手按指针所在半屏吸附左右边缘 */
+        .dscf-msgnav-bar {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            height: 30px;
+            padding: 0 6px 0 24px;
+            box-sizing: border-box;
+            cursor: grab;
+            opacity: 0;
+            touch-action: none;
+            transition: opacity 0.1s ease;
+        }
+
+        .dscf-msgnav:hover .dscf-msgnav-bar,
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-bar,
+        .dscf-msgnav.is-dragging .dscf-msgnav-bar {
+            opacity: 1;
+        }
+
+        .dscf-msgnav.is-dragging .dscf-msgnav-bar {
+            cursor: grabbing;
+        }
+
+        /* 拖动时指针会移出胶囊，强制保留展开态，免得列表半路消失 */
+        .dscf-msgnav.is-dragging .dscf-msgnav-list {
+            background-color: var(--dscf-nav-solid);
+            border-color: var(--dscf-nav-border);
+            box-shadow: var(--dscf-nav-shadow);
+            pointer-events: auto;
+        }
+
+        .dscf-msgnav-grip {
+            display: inline-flex;
+            color: var(--dscf-nav-title);
+        }
+
+        .dscf-msgnav-grip svg {
+            display: block;
+            width: 10px;
+            height: 10px;
+        }
+
+        /* [导航关闭图标]: 顶栏右端，点击只隐藏本页的导航（刷新后恢复），不写存储 */
         .dscf-msgnav-close {
-            position: absolute;
-            top: 2px;
-            right: 6px;
+            margin-left: auto;
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -318,8 +387,7 @@
             background: transparent;
             color: var(--dscf-nav-title);
             cursor: pointer;
-            opacity: 0;
-            pointer-events: none;
+            opacity: 0.7;
             transition: opacity 0.1s ease, color 0.2s ease, background-color 0.2s ease;
         }
 
@@ -327,12 +395,6 @@
             display: block;
             width: 11px;
             height: 11px;
-        }
-
-        .dscf-msgnav:hover .dscf-msgnav-close,
-        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-close {
-            opacity: 0.7;
-            pointer-events: auto;
         }
 
         .dscf-msgnav-close:hover,
@@ -2031,7 +2093,10 @@
 		awaitScroll: false,
 		onIntent: null,
 		answerPreview: new Set(),
-		dismissed: false
+		dismissed: false,
+		position: null,
+		drag: null,
+		bar: null
 	};
 	function readText(el) {
 		const clone = (ADAPTER && ADAPTER.content ? ADAPTER.content(el) : el).cloneNode(true);
@@ -2252,9 +2317,11 @@
 		root.setAttribute(NAV_ATTR, "1");
 		const list = document.createElement("div");
 		list.className = "dscf-msgnav-list";
-		const items = document.createElement("div");
-		items.className = "dscf-msgnav-items";
-		list.append(items);
+		const bar = document.createElement("div");
+		bar.className = "dscf-msgnav-bar";
+		const grip = document.createElement("span");
+		grip.className = "dscf-msgnav-grip";
+		grip.innerHTML = GRIP_ICON;
 		const close = document.createElement("button");
 		close.type = "button";
 		close.className = "dscf-msgnav-close";
@@ -2265,15 +2332,21 @@
 			state.dismissed = true;
 			syncVisibility();
 		});
-		list.append(close);
+		bar.append(grip, close);
+		bar.addEventListener("pointerdown", startNavDrag);
+		const items = document.createElement("div");
+		items.className = "dscf-msgnav-items";
+		list.append(bar, items);
 		root.append(list);
 		document.body.appendChild(root);
 		state.root = root;
 		state.list = items;
+		state.bar = bar;
 	}
 	var QUESTION_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><circle cx=\"8\" cy=\"8\" r=\"6.2\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\"/><path d=\"M6.1 6.2a1.9 1.9 0 1 1 2.6 1.8c-.45.2-.7.5-.7 1v.2\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\" stroke-linecap=\"round\"/><circle cx=\"8\" cy=\"11.1\" r=\".75\" fill=\"currentColor\"/></svg>";
 	var ANSWER_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M3.1 3.2h9.8a1.2 1.2 0 0 1 1.2 1.2v5.1a1.2 1.2 0 0 1-1.2 1.2H7.6L4.6 13.2v-2.5H3.1a1.2 1.2 0 0 1-1.2-1.2V4.4a1.2 1.2 0 0 1 1.2-1.2Z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\" stroke-linejoin=\"round\"/><path d=\"M4.8 6h6.4M4.8 8.1h4.3\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\" stroke-linecap=\"round\"/></svg>";
 	var CLOSE_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\" stroke-linecap=\"round\"/></svg>";
+	var GRIP_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><g fill=\"currentColor\"><circle cx=\"6\" cy=\"4.5\" r=\"1\"/><circle cx=\"10\" cy=\"4.5\" r=\"1\"/><circle cx=\"6\" cy=\"8\" r=\"1\"/><circle cx=\"10\" cy=\"8\" r=\"1\"/><circle cx=\"6\" cy=\"11.5\" r=\"1\"/><circle cx=\"10\" cy=\"11.5\" r=\"1\"/></g></svg>";
 	function isShowingAnswer(entry) {
 		return Boolean(entry.replyKey) && state.answerPreview.has(entry.key);
 	}
@@ -2390,6 +2463,93 @@
 		if (!state.root) return;
 		state.root.classList.toggle("is-visible", !state.dismissed && state.entries.length >= MIN_ENTRIES);
 	}
+	function readNavPosition() {
+		const raw = storageGet(NAV_POSITION_KEY, "");
+		if (!raw) return null;
+		try {
+			const parsed = JSON.parse(raw);
+			if (!parsed || !Number.isFinite(parsed.top)) return null;
+			return {
+				side: parsed.side === "left" ? "left" : "right",
+				top: parsed.top
+			};
+		} catch (e) {
+			return null;
+		}
+	}
+	function saveNavPosition() {
+		if (state.position) storageSet(NAV_POSITION_KEY, JSON.stringify(state.position));
+	}
+	function clampNavTop(top) {
+		const height = state.root?.getBoundingClientRect().height || 0;
+		return Math.min(Math.max(0, top), Math.max(0, window.innerHeight - height));
+	}
+	function applyNavPosition(position) {
+		state.position = position;
+		if (!state.root) return;
+		const left = position.side === "left";
+		state.root.classList.toggle("is-left", left);
+		state.root.style.top = `${position.top}px`;
+		state.root.style.transform = "none";
+		state.root.style.left = left ? "16px" : "auto";
+		state.root.style.right = left ? "auto" : "16px";
+	}
+	function keepNavInView() {
+		if (!state.position) return;
+		const top = clampNavTop(state.position.top);
+		if (top !== state.position.top) applyNavPosition({
+			side: state.position.side,
+			top
+		});
+	}
+	function startNavDrag(event) {
+		if (event.button !== 0 || !state.root || !state.bar) return;
+		if (event.target.closest?.(".dscf-msgnav-close")) return;
+		state.drag = {
+			pointerId: event.pointerId,
+			startX: event.clientX,
+			startY: event.clientY,
+			startTop: state.root.getBoundingClientRect().top,
+			moved: false
+		};
+		state.root.classList.add("is-dragging");
+		state.bar.setPointerCapture?.(event.pointerId);
+		window.addEventListener("pointermove", moveNavDrag);
+		window.addEventListener("pointerup", endNavDrag);
+		window.addEventListener("pointercancel", endNavDrag);
+		event.preventDefault();
+	}
+	function moveNavDrag(event) {
+		const drag = state.drag;
+		if (!drag || event.pointerId !== drag.pointerId || !state.root) return;
+		const dx = event.clientX - drag.startX;
+		const dy = event.clientY - drag.startY;
+		if (!drag.moved && Math.hypot(dx, dy) < 3) return;
+		drag.moved = true;
+		applyNavPosition({
+			side: state.position?.side === "left" ? "left" : "right",
+			top: clampNavTop(drag.startTop + dy)
+		});
+	}
+	function endNavDrag(event) {
+		const drag = state.drag;
+		if (!drag || event.pointerId !== drag.pointerId) return;
+		state.drag = null;
+		state.root?.classList.remove("is-dragging");
+		if (state.bar?.hasPointerCapture?.(drag.pointerId)) state.bar.releasePointerCapture(drag.pointerId);
+		stopNavDragListeners();
+		if (!drag.moved || !state.root) return;
+		applyNavPosition({
+			side: event.type === "pointercancel" ? state.position?.side === "left" ? "left" : "right" : event.clientX < window.innerWidth / 2 ? "left" : "right",
+			top: clampNavTop(state.root.getBoundingClientRect().top)
+		});
+		saveNavPosition();
+	}
+	function stopNavDragListeners() {
+		window.removeEventListener("pointermove", moveNavDrag);
+		window.removeEventListener("pointerup", endNavDrag);
+		window.removeEventListener("pointercancel", endNavDrag);
+	}
 	function clearMessageNav() {
 		detachScroller();
 		state.entries = [];
@@ -2460,6 +2620,7 @@
 			renderItems();
 		} else syncEntryTexts();
 		syncVisibility();
+		keepNavInView();
 		updateActive();
 	}
 	function scheduleWatch() {
@@ -2474,6 +2635,9 @@
 	function initMessageNav() {
 		if (state.root) return;
 		ensureDom();
+		const position = readNavPosition();
+		if (position) applyNavPosition(position);
+		window.addEventListener("resize", keepNavInView);
 		state.historyTimer = setInterval(() => {
 			if (location.href === state.href) return;
 			state.href = location.href;
@@ -2485,6 +2649,8 @@
 	}
 	function teardownMessageNav() {
 		detachScroller();
+		stopNavDragListeners();
+		window.removeEventListener("resize", keepNavInView);
 		clearTimeout(state.refreshTimer);
 		state.refreshTimer = null;
 		clearInterval(state.watchTimer);
@@ -2497,6 +2663,7 @@
 		state.root?.remove();
 		state.root = null;
 		state.list = null;
+		state.bar = null;
 		state.rows = [];
 		state.entries = [];
 		state.activeKey = null;
@@ -2504,6 +2671,8 @@
 		state.topInset = 0;
 		state.answerPreview.clear();
 		state.dismissed = false;
+		state.position = null;
+		state.drag = null;
 		if (runtime.refreshMessageNav === refreshMessageNav) runtime.refreshMessageNav = null;
 	}
 	var THINK_SELECTOR = ".ds-think-content";
