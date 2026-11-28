@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 修复+优化
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.28.1845
+// @version      2026.11.28.1858
 // @author       sherlocknieh
 // @description  优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。
 // @license      MIT
@@ -2028,6 +2028,7 @@
 	var SITE_ADAPTERS = [
 		{
 			hosts: ["chatgpt.com", "chat.openai.com"],
+			windowed: true,
 			selector: "[data-message-author-role], [data-chatgpt-search-unit-key]",
 			role: (el) => {
 				const author = el.getAttribute("data-message-author-role");
@@ -2039,6 +2040,7 @@
 		},
 		{
 			hosts: ["gemini.google.com"],
+			windowed: true,
 			selector: "user-query, model-response",
 			role: (el) => el.tagName.toLowerCase() === "user-query" ? "USER" : "ASSISTANT",
 			content: (el) => el.querySelector("div.query-content") || el.querySelector(".query-text") || el.querySelector("message-content") || el,
@@ -2047,6 +2049,7 @@
 		},
 		{
 			hosts: ["grok.com"],
+			windowed: true,
 			selector: "div[id^='response-']",
 			role: (el) => el.querySelector("[data-testid=\"user-message\"]") ? "USER" : "ASSISTANT",
 			content: (el) => el.querySelector(".response-content-markdown") || el.querySelector("[data-bubble-text]") || el,
@@ -2055,6 +2058,7 @@
 		},
 		{
 			hosts: ["chat.deepseek.com"],
+			windowed: true,
 			selector: "[data-virtual-list-item-key]",
 			role: (el) => el.querySelector(".ds-markdown") ? "ASSISTANT" : "USER",
 			content: (el) => deepseekAnswerRoots(el)[0] || el.querySelector(".ds-message") || el,
@@ -2068,6 +2072,7 @@
 		},
 		{
 			hosts: ["sichang.xyz"],
+			windowed: false,
 			selector: ".chat-message-markdown, .chat-message-copy",
 			role: (el) => {
 				if (el.closest("[class*=\"bg-bubble-assistant\"]")) return "ASSISTANT";
@@ -2080,6 +2085,7 @@
 		},
 		{
 			hosts: ["venice.ai"],
+			windowed: true,
 			selector: ".minds-chat-scroll-root [role=\"group\"], .minds-chat-scroll-root .assistant, [data-message-id]",
 			role: (el) => {
 				if (el.matches(".assistant") || el.querySelector(".assistant")) return "ASSISTANT";
@@ -2240,13 +2246,35 @@
 			text,
 			el
 		}));
-		const order = mergeOrder(fresh.map((item) => item.key));
-		const freshByKey = new Map(fresh.map((item) => [item.key, item]));
-		const items = order.map((key) => freshByKey.get(key) || state.itemsByKey.get(key)).filter(Boolean);
+		const items = pruneMissing(mergeOrder(fresh.map((item) => item.key)), new Map(fresh.map((item) => [item.key, item])));
+		const keptKeys = new Set(items.map((item) => item.key));
+		state.expanded.forEach((key) => {
+			if (!keptKeys.has(key)) state.expanded.delete(key);
+		});
+		if (state.activeKey && !keptKeys.has(state.activeKey)) state.activeKey = null;
 		state.items = items;
 		state.itemsByKey = new Map(items.map((item) => [item.key, item]));
 		state.entries = groupEntries(items);
 		return state.entries;
+	}
+	function pruneMissing(order, freshByKey) {
+		const windowed = !ADAPTER || ADAPTER.windowed !== false;
+		let first = -1;
+		let last = -1;
+		order.forEach((key, index) => {
+			if (!freshByKey.has(key)) return;
+			if (first < 0) first = index;
+			last = index;
+		});
+		const items = [];
+		order.forEach((key, index) => {
+			if (freshByKey.has(key)) {
+				items.push(freshByKey.get(key));
+				return;
+			}
+			if (windowed && (first < 0 || index < first || index > last)) items.push(state.itemsByKey.get(key));
+		});
+		return items.filter(Boolean);
 	}
 	function findRemembered(block, claimed, from) {
 		for (let index = from; index < state.items.length; index += 1) {
@@ -2885,6 +2913,7 @@
 		const entries = mergePass(readPass());
 		if (entries.length < MIN_ENTRIES) {
 			if (!state.items.length) clearMessageNav();
+			else if (state.rows.length) renderItems();
 			return;
 		}
 		const mounted = state.items.map((item) => item.el).filter((el) => el && el.isConnected);

@@ -47,6 +47,8 @@ function deepseekAnswerRoots(el) {
 const SITE_ADAPTERS = [
     {
         hosts: ['chatgpt.com', 'chat.openai.com'],
+        // 长会话只挂载可视区附近的消息：没读到的旧条目不能直接当删除
+        windowed: true,
         // 旧版每段消息带 author-role；新版整轮拆成 unit，角色写在 data-chatgpt-search-unit-key 后缀
         selector: '[data-message-author-role], [data-chatgpt-search-unit-key]',
         role: el => {
@@ -60,6 +62,8 @@ const SITE_ADAPTERS = [
     },
     {
         hosts: ['gemini.google.com'],
+        // infinite-scroller 分片渲染
+        windowed: true,
         selector: 'user-query, model-response',
         role: el => (el.tagName.toLowerCase() === 'user-query' ? 'USER' : 'ASSISTANT'),
         // 正文只在气泡内；「你说」这类读屏副本由 readText 统一剔除
@@ -72,6 +76,8 @@ const SITE_ADAPTERS = [
     },
     {
         hosts: ['grok.com'],
+        // 站点可能分片渲染，保守按窗口化处理：只裁窗口内部缺失的条目
+        windowed: true,
         // 用户消息和回答都在 response- 前缀的块里，靠 testid 区分角色
         selector: "div[id^='response-']",
         role: el => (el.querySelector('[data-testid="user-message"]') ? 'USER' : 'ASSISTANT'),
@@ -81,6 +87,8 @@ const SITE_ADAPTERS = [
     },
     {
         hosts: ['chat.deepseek.com'],
+        // 虚拟列表只挂载可视区附近的消息
+        windowed: true,
         // 每条消息是一个虚拟列表项；回答里有 .ds-markdown（思考区也在里面），提问只有纯文本气泡
         selector: '[data-virtual-list-item-key]',
         role: el => (el.querySelector('.ds-markdown') ? 'ASSISTANT' : 'USER'),
@@ -103,6 +111,8 @@ const SITE_ADAPTERS = [
     },
     {
         hosts: ['sichang.xyz'],
+        // 整段 DOM 常驻：本轮没读到的旧消息就是被删了，两端也一起裁掉
+        windowed: false,
         // 用户气泡正文是 .chat-message-copy，回答渲染进 .chat-message-markdown；
         // 两个都是站点自己的语义类名，比外层那串 Tailwind 组合类稳定
         selector: '.chat-message-markdown, .chat-message-copy',
@@ -120,6 +130,8 @@ const SITE_ADAPTERS = [
     },
     {
         hosts: ['venice.ai'],
+        // 两种聊天页都可能分片渲染，保守按窗口化处理
+        windowed: true,
         // 两种聊天页结构不同，一次收全：
         // agentic 页每条消息是 [role=group]（用户）或 .assistant（回答）；
         // 经典聊天页每条消息是 [data-message-id]，回答里嵌 .assistant
@@ -359,12 +371,46 @@ function mergePass(blocks) {
     const fresh = blocks.map(({ key, role, text, el }) => ({ key, role, text, el }));
     const order = mergeOrder(fresh.map(item => item.key));
     const freshByKey = new Map(fresh.map(item => [item.key, item]));
-    const items = order.map(key => freshByKey.get(key) || state.itemsByKey.get(key)).filter(Boolean);
+    const items = pruneMissing(order, freshByKey);
+
+    // 被删掉的提问不再占位：展开态和失效的当前条目一起清掉，
+    // 本轮末尾的 updateActive 会按滚动位置重新选一条
+    const keptKeys = new Set(items.map(item => item.key));
+    state.expanded.forEach(key => {
+        if (!keptKeys.has(key)) state.expanded.delete(key);
+    });
+    if (state.activeKey && !keptKeys.has(state.activeKey)) state.activeKey = null;
 
     state.items = items;
     state.itemsByKey = new Map(items.map(item => [item.key, item]));
     state.entries = groupEntries(items);
     return state.entries;
+}
+
+// 删除判定：窗口化站点会卸载视口外的消息，只有夹在本轮已挂载窗口中间的旧条目才算删除；
+// 整段 DOM 常驻的站点（windowed: false）本轮没读到就是被删了，两端也一起裁掉
+function pruneMissing(order, freshByKey) {
+    const windowed = !ADAPTER || ADAPTER.windowed !== false;
+    let first = -1;
+    let last = -1;
+    order.forEach((key, index) => {
+        if (!freshByKey.has(key)) return;
+        if (first < 0) first = index;
+        last = index;
+    });
+
+    const items = [];
+    order.forEach((key, index) => {
+        if (freshByKey.has(key)) {
+            items.push(freshByKey.get(key));
+            return;
+        }
+        // 窗口两端缺失可能只是还没挂载，先留着；中间缺失才是被删
+        if (windowed && (first < 0 || index < first || index > last)) {
+            items.push(state.itemsByKey.get(key));
+        }
+    });
+    return items.filter(Boolean);
 }
 
 // 旧清单里找同一条：同角色、同正文，从上次认领的位置往后找，
@@ -1284,7 +1330,12 @@ export function refreshMessageNav() {
     if (entries.length < MIN_ENTRIES) {
         // 已发现过消息时，这一轮读不到多半是站点正在重渲染：保留面板和悬停态，
         // 等下一次刷新补回来；只有清单真为空（首次加载、空会话）才收起来
-        if (!state.items.length) clearMessageNav();
+        if (!state.items.length) {
+            clearMessageNav();
+        } else if (state.rows.length) {
+            // 提问被删、只剩未归组的回答：撤掉已删除提问的行，别留下可点的旧条目
+            renderItems();
+        }
         return;
     }
 
