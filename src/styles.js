@@ -236,8 +236,7 @@ export function addCSSClass() {
             transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
         }
 
-        .dscf-msgnav:hover .dscf-msgnav-list,
-        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-list {
+        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-list {
             background-color: var(--dscf-nav-solid);
             border-color: var(--dscf-nav-border);
             box-shadow: var(--dscf-nav-shadow);
@@ -260,8 +259,7 @@ export function addCSSClass() {
             transition: opacity 0.1s ease;
         }
 
-        .dscf-msgnav:hover .dscf-msgnav-bar,
-        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-bar,
+        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-bar,
         .dscf-msgnav.is-dragging .dscf-msgnav-bar {
             opacity: 1;
         }
@@ -276,6 +274,11 @@ export function addCSSClass() {
             border-color: var(--dscf-nav-border);
             box-shadow: var(--dscf-nav-shadow);
             pointer-events: auto;
+        }
+
+        /* 松手后滑向吸附边：过渡只在飞行期间生效，拖动时逐帧跟手 */
+        .dscf-msgnav.is-flying {
+            transition: left 0.26s cubic-bezier(0.2, 0.8, 0.2, 1), top 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
         }
 
         .dscf-msgnav-grip {
@@ -422,24 +425,19 @@ export function addCSSClass() {
         }
 
         /* 展开列表（悬停或键盘聚焦）时，只让当前预览侧从 0 宽度长到整行 */
-        .dscf-msgnav:hover .dscf-msgnav-item:not(.is-showing-answer) .dscf-msgnav-text-question,
-        .dscf-msgnav:hover .dscf-msgnav-item.is-showing-answer .dscf-msgnav-text-answer,
-        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-item:not(.is-showing-answer) .dscf-msgnav-text-question,
-        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-item.is-showing-answer .dscf-msgnav-text-answer {
+        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-item:not(.is-showing-answer) .dscf-msgnav-text-question,
+        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-item.is-showing-answer .dscf-msgnav-text-answer {
             flex-grow: 1;
             opacity: 1;
         }
 
         /* 展开时两个按钮一起露面：当前预览侧全亮，另一侧只留一半亮度作提示 */
-        .dscf-msgnav:hover .dscf-msgnav-role,
-        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-role {
+        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-role {
             opacity: 0.45;
         }
 
-        .dscf-msgnav:hover .dscf-msgnav-item:not(.is-showing-answer) .dscf-msgnav-role-question,
-        .dscf-msgnav:hover .dscf-msgnav-item.is-showing-answer .dscf-msgnav-role-answer,
-        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-item:not(.is-showing-answer) .dscf-msgnav-role-question,
-        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-item.is-showing-answer .dscf-msgnav-role-answer {
+        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-item:not(.is-showing-answer) .dscf-msgnav-role-question,
+        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-item.is-showing-answer .dscf-msgnav-role-answer {
             opacity: 1;
         }
 

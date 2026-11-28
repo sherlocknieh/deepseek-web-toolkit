@@ -17,6 +17,9 @@ import { NAV_POSITION_KEY } from './constants.js';
 // 有一条提问就出导航：DeepSeek 原生导航同样单条提问即常显，这里保持一致
 const NAV_ATTR = 'data-dscf-msgnav';
 const FLASH_MS = 600;
+// 松手后滑向吸附边的时长，与样式里的 is-flying 过渡保持一致
+const NAV_FLY_MS = 260;
+const NAV_EDGE = 16;
 const MIN_ENTRIES = 1;
 
 // 站点适配：每种站点只声明自己的消息块选择器、角色判定、正文范围和滚动容器。
@@ -174,8 +177,10 @@ const state = {
     dismissed: false,
     // 顶栏拖动后的吸附边与顶边像素；null 表示保持默认的右侧垂直居中
     position: null,
-    // 正在拖动时的起始指针、起始顶边与是否越过阈值
+    // 正在拖动时的指针偏移、卡片坐标与是否越过阈值
     drag: null,
+    // 松手后滑向边缘的定时器
+    flyTimer: null,
     bar: null
 };
 
@@ -789,13 +794,35 @@ function saveNavPosition() {
     if (state.position) storageSet(NAV_POSITION_KEY, JSON.stringify(state.position));
 }
 
-// 顶边夹在视口内：条目变多或窗口变矮时把导航按回来，不让它跑出屏幕
+// 卡片（展开后的 240 宽面板）横向夹在视口内；拖动与飞行都以卡片左侧坐标为基准
+function clampNavLeft(left) {
+    const width = state.list?.offsetWidth || 0;
+    return Math.min(Math.max(0, left), Math.max(0, window.innerWidth - width));
+}
+
+// 顶边同样夹在视口内：条目变多或窗口变矮时把导航按回来，不让它跑出屏幕
 function clampNavTop(top) {
     const height = state.root?.getBoundingClientRect().height || 0;
     return Math.min(Math.max(0, top), Math.max(0, window.innerHeight - height));
 }
 
-// 吸附边用 class 切换镜像布局；inline 只写顶边与左右边距，默认的居中偏移随之取消
+// 按卡片坐标摆位置：右侧吸附时列表从 34px 胶囊向左溢出，左侧吸附则向右展开；
+// 跨边时换镜像 class 但卡片本身仍停在 cardLeft，不跟着跳
+function positionNavCard(side, cardLeft, cardTop) {
+    const root = state.root;
+    const list = state.list;
+    if (!root || !list) return;
+
+    root.classList.toggle('is-left', side === 'left');
+    root.style.transform = 'none';
+    root.style.right = 'auto';
+    root.style.left = side === 'left'
+        ? `${cardLeft}px`
+        : `${cardLeft + list.offsetWidth - root.offsetWidth}px`;
+    root.style.top = `${cardTop}px`;
+}
+
+// 静止态：吸附边用 class 切换镜像布局；inline 只写顶边与左右边距，默认的居中偏移随之取消
 function applyNavPosition(position) {
     state.position = position;
     if (!state.root) return;
@@ -804,30 +831,64 @@ function applyNavPosition(position) {
     state.root.classList.toggle('is-left', left);
     state.root.style.top = `${position.top}px`;
     state.root.style.transform = 'none';
-    // 边距与样式里的 right: 16px 保持一致
-    state.root.style.left = left ? '16px' : 'auto';
-    state.root.style.right = left ? 'auto' : '16px';
+    // 边距与样式里的 16px 保持一致
+    state.root.style.left = left ? `${NAV_EDGE}px` : 'auto';
+    state.root.style.right = left ? 'auto' : `${NAV_EDGE}px`;
 }
 
 function keepNavInView() {
-    if (!state.position) return;
+    if (!state.position || state.drag || state.flyTimer) return;
     const top = clampNavTop(state.position.top);
     if (top !== state.position.top) {
         applyNavPosition({ side: state.position.side, top });
     }
 }
 
-// [导航顶栏] 拖动：按下只记录起点，超过阈值才算拖动；拖动中只改垂直位置，
-// 松手按指针所在半屏吸附左右边缘并写入存储。事件挂到 window，指针移出胶囊也不丢
+// 松手后滑向吸附边：先在不带过渡的情况下把卡片摆到当前视觉位置（跨边时内容镜像
+// 立刻切换，卡片不跳），再开 transition 走到目标坐标，结束后清掉过渡交给逐帧拖动
+function flyNavTo(side, cardLeft, cardTop) {
+    if (!state.root || !state.list) return;
+
+    const card = state.list.getBoundingClientRect();
+    state.root.classList.remove('is-flying');
+    positionNavCard(side, card.left, card.top);
+    void state.root.offsetWidth;
+
+    state.root.classList.add('is-flying');
+    positionNavCard(side, cardLeft, cardTop);
+
+    state.position = { side, top: cardTop };
+    saveNavPosition();
+
+    clearTimeout(state.flyTimer);
+    state.flyTimer = setTimeout(() => {
+        state.flyTimer = null;
+        state.root?.classList.remove('is-flying');
+    }, NAV_FLY_MS + 60);
+}
+
+// [导航顶栏] 拖动：按下记录指针与卡片的相对位置，超过阈值后卡片按指针双轴移动；
+// 松手按卡片中线所在半屏吸附左/右边缘并滑过去。事件挂到 window，指针移出胶囊也不丢
 function startNavDrag(event) {
-    if (event.button !== 0 || !state.root || !state.bar) return;
+    if (event.button !== 0 || !state.root || !state.bar || !state.list) return;
     if (event.target.closest?.('.dscf-msgnav-close')) return;
+
+    // 飞行途中再次按下：停在当前视觉位置，从半路接着拖
+    clearTimeout(state.flyTimer);
+    state.flyTimer = null;
+    state.root.classList.remove('is-flying');
+
+    const side = state.position?.side === 'left' ? 'left' : 'right';
+    const card = state.list.getBoundingClientRect();
+    positionNavCard(side, card.left, card.top);
 
     state.drag = {
         pointerId: event.pointerId,
-        startX: event.clientX,
-        startY: event.clientY,
-        startTop: state.root.getBoundingClientRect().top,
+        side,
+        offsetX: event.clientX - card.left,
+        offsetY: event.clientY - card.top,
+        cardLeft: card.left,
+        cardTop: card.top,
         moved: false
     };
     state.root.classList.add('is-dragging');
@@ -843,15 +904,14 @@ function moveNavDrag(event) {
     const drag = state.drag;
     if (!drag || event.pointerId !== drag.pointerId || !state.root) return;
 
-    const dx = event.clientX - drag.startX;
-    const dy = event.clientY - drag.startY;
-    if (!drag.moved && Math.hypot(dx, dy) < 3) return;
+    const cardLeft = clampNavLeft(event.clientX - drag.offsetX);
+    const cardTop = clampNavTop(event.clientY - drag.offsetY);
+    if (!drag.moved && Math.hypot(cardLeft - drag.cardLeft, cardTop - drag.cardTop) < 3) return;
 
     drag.moved = true;
-    applyNavPosition({
-        side: state.position?.side === 'left' ? 'left' : 'right',
-        top: clampNavTop(drag.startTop + dy)
-    });
+    drag.cardLeft = cardLeft;
+    drag.cardTop = cardTop;
+    positionNavCard(drag.side, cardLeft, cardTop);
 }
 
 function endNavDrag(event) {
@@ -864,15 +924,19 @@ function endNavDrag(event) {
         state.bar.releasePointerCapture(drag.pointerId);
     }
     stopNavDragListeners();
-    if (!drag.moved || !state.root) return;
+    if (!drag.moved || !state.root || !state.list) return;
 
-    // 取消（如系统手势打断）时保持当前吸附边，不按可能为 0 的指针位置重算
+    const width = state.list.offsetWidth;
+    // 取消（如系统手势打断）时留在原吸附边，不按可能为 0 的指针位置重算
     const side = event.type === 'pointercancel'
-        ? (state.position?.side === 'left' ? 'left' : 'right')
-        : (event.clientX < window.innerWidth / 2 ? 'left' : 'right');
-    const top = clampNavTop(state.root.getBoundingClientRect().top);
-    applyNavPosition({ side, top });
-    saveNavPosition();
+        ? drag.side
+        : (drag.cardLeft + width / 2 < window.innerWidth / 2 ? 'left' : 'right');
+    const maxLeft = Math.max(0, window.innerWidth - width);
+    const cardLeft = side === 'left'
+        ? Math.min(NAV_EDGE, maxLeft)
+        : Math.max(0, maxLeft - NAV_EDGE);
+
+    flyNavTo(side, cardLeft, clampNavTop(drag.cardTop));
 }
 
 function stopNavDragListeners() {
@@ -1030,6 +1094,8 @@ export function teardownMessageNav() {
     state.dismissed = false;
     state.position = null;
     state.drag = null;
+    clearTimeout(state.flyTimer);
+    state.flyTimer = null;
 
     if (runtime.refreshMessageNav === refreshMessageNav) {
         runtime.refreshMessageNav = null;
