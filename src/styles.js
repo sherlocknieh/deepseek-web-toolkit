@@ -388,6 +388,34 @@ export function addCSSClass() {
             transform: rotate(90deg);
         }
 
+        /* [问/答图标]: 每条标题左侧标出角色；提问在展开箭头之后，回答在序号之前。
+            收起成横线时和文字一起透明 */
+        .dscf-msgnav-icon {
+            flex: 0 0 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 14px;
+            color: var(--dscf-nav-title);
+            opacity: 0;
+            transition: opacity 0.1s ease, color 0.2s ease;
+        }
+
+        .dscf-msgnav-icon svg {
+            display: block;
+            width: 12px;
+            height: 12px;
+        }
+
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-icon {
+            opacity: 0.55;
+        }
+
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-item.is-active .dscf-msgnav-icon {
+            color: var(--dscf-nav-active);
+            opacity: 1;
+        }
+
         /* 正文一行一条消息：提问显示提问、回答行显示该条回答；收起成横线时只留横线 */
         .dscf-msgnav-text {
             flex: 1 1 auto;
@@ -443,10 +471,12 @@ export function addCSSClass() {
            点击跳到这条回答 */
         .dscf-msgnav-item.is-sub {
             height: 24px;
+            padding-left: 16px;
+            box-sizing: border-box;
         }
 
         .dscf-msgnav-item.is-sub .dscf-msgnav-jump {
-            padding-left: 24px;
+            padding-left: 8px;
         }
 
         .dscf-msgnav-item.is-sub .dscf-msgnav-text {

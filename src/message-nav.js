@@ -821,6 +821,21 @@ const CARET_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false
     + ' stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>'
     + '</svg>';
 
+// [问/答图标]：标题左侧标出角色，提问是圆圈问号、回答是气泡，不依赖图标字体
+const QUESTION_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">'
+    + '<circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.4"/>'
+    + '<path d="M6.1 6.2a1.9 1.9 0 1 1 2.6 1.8c-.45.2-.7.5-.7 1v.2" fill="none"'
+    + ' stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>'
+    + '<circle cx="8" cy="11.1" r=".75" fill="currentColor"/>'
+    + '</svg>';
+
+const ANSWER_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">'
+    + '<path d="M3.1 3.2h9.8a1.2 1.2 0 0 1 1.2 1.2v5.1a1.2 1.2 0 0 1-1.2 1.2H7.6L4.6 13.2v-2.5H3.1a1.2 1.2 0 0 1-1.2-1.2V4.4a1.2 1.2 0 0 1 1.2-1.2Z"'
+    + ' fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>'
+    + '<path d="M4.8 6h6.4M4.8 8.1h4.3" fill="none" stroke="currentColor"'
+    + ' stroke-width="1.3" stroke-linecap="round"/>'
+    + '</svg>';
+
 const CLOSE_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">'
     + '<path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2" fill="none" stroke="currentColor"'
     + ' stroke-width="1.4" stroke-linecap="round"/>'
@@ -977,6 +992,11 @@ function fillItemRow(row, entry) {
     caret.setAttribute('aria-hidden', 'true');
     if (expandable) caret.innerHTML = CARET_ICON;
 
+    const icon = document.createElement('span');
+    icon.className = 'dscf-msgnav-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.innerHTML = QUESTION_ICON;
+
     const jump = document.createElement('button');
     jump.type = 'button';
     jump.className = 'dscf-msgnav-jump';
@@ -995,7 +1015,7 @@ function fillItemRow(row, entry) {
     line.className = 'dscf-msgnav-line';
     indicator.append(line);
 
-    row.replaceChildren(caret, jump, indicator);
+    row.replaceChildren(caret, icon, jump, indicator);
 
     // 整行都是命中区（正文、箭头、最右侧横线）：点提问先切换子回答展开态，再跳到该提问
     row.onclick = () => {
@@ -1004,12 +1024,17 @@ function fillItemRow(row, entry) {
     };
 }
 
-// 子条目：一条回答，行首序号标明同一提问下的第几条；点击展开所在提问并跳到这条回答
+// 子条目：一条回答，行首是回答图标 + 序号（同一提问下的第几条）；点击展开所在提问并跳到这条回答
 function fillReplyRow(row, entry, reply, index) {
     row.className = 'dscf-msgnav-item is-sub';
     row.classList.toggle('is-active', reply.key === state.activeKey);
     row.dataset.key = reply.key;
     row.dataset.parentKey = entry.key;
+
+    const icon = document.createElement('span');
+    icon.className = 'dscf-msgnav-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.innerHTML = ANSWER_ICON;
 
     const order = document.createElement('span');
     order.className = 'dscf-msgnav-subindex';
@@ -1032,7 +1057,7 @@ function fillReplyRow(row, entry, reply, index) {
     line.className = 'dscf-msgnav-line';
     indicator.append(line);
 
-    row.replaceChildren(order, jump, indicator);
+    row.replaceChildren(icon, order, jump, indicator);
 
     row.onclick = () => openReply(entry, reply);
 }

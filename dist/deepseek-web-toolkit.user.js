@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 修复+优化
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.28.1904
+// @version      2026.11.28.1908
 // @author       sherlocknieh
 // @description  优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。
 // @license      MIT
@@ -474,6 +474,34 @@
             transform: rotate(90deg);
         }
 
+        /* [问/答图标]: 每条标题左侧标出角色；提问在展开箭头之后，回答在序号之前。
+            收起成横线时和文字一起透明 */
+        .dscf-msgnav-icon {
+            flex: 0 0 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 14px;
+            color: var(--dscf-nav-title);
+            opacity: 0;
+            transition: opacity 0.1s ease, color 0.2s ease;
+        }
+
+        .dscf-msgnav-icon svg {
+            display: block;
+            width: 12px;
+            height: 12px;
+        }
+
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-icon {
+            opacity: 0.55;
+        }
+
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-item.is-active .dscf-msgnav-icon {
+            color: var(--dscf-nav-active);
+            opacity: 1;
+        }
+
         /* 正文一行一条消息：提问显示提问、回答行显示该条回答；收起成横线时只留横线 */
         .dscf-msgnav-text {
             flex: 1 1 auto;
@@ -529,10 +557,12 @@
            点击跳到这条回答 */
         .dscf-msgnav-item.is-sub {
             height: 24px;
+            padding-left: 16px;
+            box-sizing: border-box;
         }
 
         .dscf-msgnav-item.is-sub .dscf-msgnav-jump {
-            padding-left: 24px;
+            padding-left: 8px;
         }
 
         .dscf-msgnav-item.is-sub .dscf-msgnav-text {
@@ -2547,6 +2577,8 @@
 		state.root.classList.toggle("is-open", navPointInside(event.clientX, event.clientY));
 	}
 	var CARET_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M6.2 3.6 10.6 8l-4.4 4.4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>";
+	var QUESTION_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><circle cx=\"8\" cy=\"8\" r=\"6.2\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\"/><path d=\"M6.1 6.2a1.9 1.9 0 1 1 2.6 1.8c-.45.2-.7.5-.7 1v.2\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\" stroke-linecap=\"round\"/><circle cx=\"8\" cy=\"11.1\" r=\".75\" fill=\"currentColor\"/></svg>";
+	var ANSWER_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M3.1 3.2h9.8a1.2 1.2 0 0 1 1.2 1.2v5.1a1.2 1.2 0 0 1-1.2 1.2H7.6L4.6 13.2v-2.5H3.1a1.2 1.2 0 0 1-1.2-1.2V4.4a1.2 1.2 0 0 1 1.2-1.2Z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\" stroke-linejoin=\"round\"/><path d=\"M4.8 6h6.4M4.8 8.1h4.3\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\" stroke-linecap=\"round\"/></svg>";
 	var CLOSE_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\" stroke-linecap=\"round\"/></svg>";
 	var GRIP_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><g fill=\"currentColor\"><circle cx=\"6\" cy=\"4.5\" r=\"1\"/><circle cx=\"10\" cy=\"4.5\" r=\"1\"/><circle cx=\"6\" cy=\"8\" r=\"1\"/><circle cx=\"10\" cy=\"8\" r=\"1\"/><circle cx=\"6\" cy=\"11.5\" r=\"1\"/><circle cx=\"10\" cy=\"11.5\" r=\"1\"/></g></svg>";
 	var TO_TOP_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M3.5 3.6h9M8 13.2V6.2M5.3 8.9 8 6.2l2.7 2.7\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>";
@@ -2639,6 +2671,10 @@
 		caret.className = "dscf-msgnav-caret";
 		caret.setAttribute("aria-hidden", "true");
 		if (expandable) caret.innerHTML = CARET_ICON;
+		const icon = document.createElement("span");
+		icon.className = "dscf-msgnav-icon";
+		icon.setAttribute("aria-hidden", "true");
+		icon.innerHTML = QUESTION_ICON;
 		const jump = document.createElement("button");
 		jump.type = "button";
 		jump.className = "dscf-msgnav-jump";
@@ -2654,7 +2690,7 @@
 		const line = document.createElement("span");
 		line.className = "dscf-msgnav-line";
 		indicator.append(line);
-		row.replaceChildren(caret, jump, indicator);
+		row.replaceChildren(caret, icon, jump, indicator);
 		row.onclick = () => {
 			if (expandable) setEntryExpanded(entry.key, !state.expanded.has(entry.key));
 			jumpTo(entry);
@@ -2665,6 +2701,10 @@
 		row.classList.toggle("is-active", reply.key === state.activeKey);
 		row.dataset.key = reply.key;
 		row.dataset.parentKey = entry.key;
+		const icon = document.createElement("span");
+		icon.className = "dscf-msgnav-icon";
+		icon.setAttribute("aria-hidden", "true");
+		icon.innerHTML = ANSWER_ICON;
 		const order = document.createElement("span");
 		order.className = "dscf-msgnav-subindex";
 		order.textContent = String(index + 1);
@@ -2682,7 +2722,7 @@
 		const line = document.createElement("span");
 		line.className = "dscf-msgnav-line";
 		indicator.append(line);
-		row.replaceChildren(order, jump, indicator);
+		row.replaceChildren(icon, order, jump, indicator);
 		row.onclick = () => openReply(entry, reply);
 	}
 	function openReply(entry, reply) {
