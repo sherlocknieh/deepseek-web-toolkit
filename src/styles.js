@@ -352,7 +352,7 @@ export function addCSSClass() {
             align-items: center;
             justify-content: flex-end;
             height: 100%;
-            padding: 0;
+            padding: 0 6px;
             border: 0;
             background: transparent;
             color: inherit;
