@@ -174,7 +174,9 @@ export function addCSSClass() {
             --dscf-nav-line: rgba(0, 0, 0, 0.16);
             --dscf-nav-divider: rgba(0, 0, 0, 0.08);
             --dscf-nav-active: #3964fe;
-            --dscf-nav-active-soft: rgba(57, 100, 254, 0.14);
+            --dscf-nav-switch: rgba(0, 0, 0, 0.06);
+            --dscf-nav-thumb: #ffffff;
+            --dscf-nav-thumb-shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
             position: fixed;
             top: 50%;
             right: 16px;
@@ -206,16 +208,6 @@ export function addCSSClass() {
 
         .dscf-msgnav.is-left .dscf-msgnav-jump {
             justify-content: flex-start;
-        }
-
-        .dscf-msgnav.is-left .dscf-msgnav-preview {
-            margin-right: 0;
-            margin-left: 12px;
-        }
-
-        .dscf-msgnav.is-left .dscf-msgnav-roles {
-            margin-right: 0;
-            margin-left: 6px;
         }
 
         /* 窄屏也让出位置而不是整个隐藏：收起时只是右侧一列 34px 宽的横线，展开是悬停操作，
@@ -338,8 +330,8 @@ export function addCSSClass() {
             width: 0;
         }
 
-        /* 一项一条消息：预览文字靠左、图标和横线靠右；收起时文字和图标透明，只留横线。
-           整行都是命中区（横线也点得动），右侧两个按钮分别预览提问/回答 */
+        /* 一项一条消息：行首是预览开关、中间是预览文字、行尾是横线；收起时文字和开关透明，
+           只留横线。整行都是命中区（横线也点得动），开关负责切换提问/回答预览 */
         .dscf-msgnav-item {
             position: relative;
             display: flex;
@@ -369,37 +361,40 @@ export function addCSSClass() {
             cursor: pointer;
         }
 
-        /* 文字右侧并排的提问/回答按钮：提问在左、回答紧挨着它；收起时随文字一起透明，
-           只留横线。当前预览哪一侧由亮度区分，两个按钮的位置永远不换 */
+        /* 行首的提问/回答开关：两枚图标同处一条胶囊形轨道，选中侧浮起成白色滑块，
+           形状和分段开关一致；与行尾横线分居两端，收起时整条轨道随文字一起透明 */
         .dscf-msgnav-roles {
             flex: 0 0 auto;
             display: inline-flex;
             align-items: center;
-            gap: 2px;
-            margin-right: 6px;
+            gap: 0;
+            padding: 2px;
+            border-radius: 999px;
+            background-color: transparent;
+            transition: background-color 0.2s ease;
         }
 
         .dscf-msgnav-role {
-            flex: 0 0 16px;
+            flex: 0 0 18px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 16px;
-            height: 16px;
+            width: 18px;
+            height: 18px;
             padding: 0;
             border: 0;
-            border-radius: 4px;
+            border-radius: 999px;
             background: transparent;
             color: var(--dscf-nav-title);
             cursor: pointer;
             opacity: 0;
-            transition: opacity 0.1s ease, color 0.2s ease, background-color 0.2s ease;
+            transition: opacity 0.1s ease, color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
         }
 
         .dscf-msgnav-role svg {
             display: block;
-            width: 14px;
-            height: 14px;
+            width: 12px;
+            height: 12px;
         }
 
         /* 预览文字：提问和回答叠在同一个位置，宽度靠 flex-grow 一收一放；
@@ -409,7 +404,6 @@ export function addCSSClass() {
             min-width: 0;
             display: flex;
             align-items: center;
-            margin-right: 12px;
             overflow: hidden;
         }
 
@@ -433,25 +427,29 @@ export function addCSSClass() {
             opacity: 1;
         }
 
-        /* 展开时两个按钮一起露面：选中侧用品牌色图标 + 淡品牌底标出，
-           未选中侧压到 0.35 亮度且没有底色，扫一眼就能看出当前预览哪一侧 */
+        /* 展开时露出开关轨道，两个图标一起露面：选中侧是浮起的白色滑块 + 品牌色图标，
+           未选中侧压到 0.4 亮度，滑块位置随预览侧在左右两格之间切换 */
+        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-roles {
+            background-color: var(--dscf-nav-switch);
+        }
+
         .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-role {
-            opacity: 0.35;
+            opacity: 0.4;
         }
 
         .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-item:not(.is-showing-answer) .dscf-msgnav-role-question,
         .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-item.is-showing-answer .dscf-msgnav-role-answer {
             opacity: 1;
             color: var(--dscf-nav-active);
-            background-color: var(--dscf-nav-active-soft);
+            background-color: var(--dscf-nav-thumb);
+            box-shadow: var(--dscf-nav-thumb-shadow);
         }
 
-        /* 悬停未选中侧：只补一层淡底提示可点，选中侧的底色由上面的规则固定 */
+        /* 悬停未选中侧：只提亮图标，滑块仍由上面的规则固定 */
         .dscf-msgnav:hover .dscf-msgnav-role:hover,
         .dscf-msgnav:has(:focus-visible) .dscf-msgnav-role:focus-visible {
             opacity: 1;
             color: var(--dscf-nav-hover);
-            background-color: var(--dscf-nav-active-soft);
         }
 
         /* 回答还没出现：答按钮不占位，问按钮旁边只留它自己 */
@@ -519,7 +517,9 @@ export function addCSSClass() {
             --dscf-nav-line: rgba(255, 255, 255, 0.2);
             --dscf-nav-divider: rgba(255, 255, 255, 0.08);
             --dscf-nav-active: #679efe;
-            --dscf-nav-active-soft: rgba(103, 158, 254, 0.22);
+            --dscf-nav-switch: rgba(255, 255, 255, 0.1);
+            --dscf-nav-thumb: #4a4a4e;
+            --dscf-nav-thumb-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
         }
 
         /* 跳转目标的气泡边缘发光：只画光圈不铺底色，正文颜色不受影响。

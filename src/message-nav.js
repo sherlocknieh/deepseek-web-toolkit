@@ -707,7 +707,7 @@ function renderItems() {
 
         jump.append(preview);
 
-        // 文字右侧固定并排的两个按钮：提问在左、回答紧挨着它，切换预览时只换亮度不换位置
+        // 行首放提问/回答开关，和行尾的横线分居两端：提问在左、回答紧挨着它，切换预览时只换滑块位置
         const roles = document.createElement('span');
         roles.className = 'dscf-msgnav-roles';
         const questionRole = document.createElement('button');
@@ -731,13 +731,13 @@ function renderItems() {
 
         roles.append(questionRole, answerRole);
 
-        row.append(jump, roles, indicator);
+        row.append(roles, jump, indicator);
 
-        // 整行都是命中区：正文、两个图标按钮、最右侧的横线。横线只是装饰元素，
+        // 整行都是命中区：开关、正文、最右侧的横线。横线只是装饰元素，
         // 点击挂在行上才不会在横线那 16px 上留死区。点非当前条目只跳过去、保持它已有的
         // 预览侧；点当前条目才在提问/回答之间切换，回答未出现时只能跳回提问
         row.addEventListener('click', event => {
-            // 两个图标按钮那一段有自己的语义，在它们身上点完就不再当成行点击
+            // 开关那一段有自己的语义，在它们身上点完就不再当成行点击
             if (event.target.closest('.dscf-msgnav-roles')) return;
             if (entry.key !== state.activeKey) {
                 if (isShowingAnswer(entry)) {
