@@ -282,9 +282,16 @@ export function addCSSClass() {
             height: 10px;
         }
 
-        /* [导航关闭图标]: 顶栏右端，点击只隐藏本页的导航（刷新后恢复），不写存储 */
-        .dscf-msgnav-close {
+        /* [导航顶栏按钮]: 右端的跳顶、跳底与隐藏共用一套 18×18 图标按钮；
+           隐藏只躲本页的导航（刷新后恢复），不写存储 */
+        .dscf-msgnav-tools {
             margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+
+        .dscf-msgnav-tools button {
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -300,14 +307,14 @@ export function addCSSClass() {
             transition: opacity 0.1s ease, color 0.2s ease, background-color 0.2s ease;
         }
 
-        .dscf-msgnav-close svg {
+        .dscf-msgnav-tools button svg {
             display: block;
             width: 11px;
             height: 11px;
         }
 
-        .dscf-msgnav-close:hover,
-        .dscf-msgnav-close:focus-visible {
+        .dscf-msgnav-tools button:hover,
+        .dscf-msgnav-tools button:focus-visible {
             opacity: 1;
             color: var(--dscf-nav-hover);
             background-color: rgba(103, 112, 254, 0.16);

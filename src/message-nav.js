@@ -578,6 +578,19 @@ function jumpToUnmounted(key, activeKey, reply) {
     }, 400);
 }
 
+// 跳到会话顶部 / 底部（导航顶栏按钮）：和条目跳转一样直接改滚动容器、不做动画；
+// 先解除跳转锁，落点后立即按位置重算高亮，高亮落在首条或末尾已挂载的那条
+function jumpToEdge(where) {
+    const scroller = state.scroller;
+    if (!scroller) return;
+
+    state.jumpLocked = false;
+    state.awaitScroll = false;
+    const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+    scroller.scrollTop = where === 'top' ? 0 : max;
+    updateActive();
+}
+
 // 无正文时把光晕落到包住图片、自己带圆角的那层容器上，否则方框会盖住图片的圆角
 function roundedImageBox(block) {
     const img = block.querySelector('img');
@@ -732,8 +745,8 @@ function ensureDom() {
     const card = document.createElement('div');
     card.className = 'dscf-msgnav-list';
 
-    // [导航顶栏]: 展开后盖在列表上方，左端拖动把手、右端隐藏按钮；
-    // 整条都是拖动区，拖动只改垂直位置，松手按指针所在半屏吸附左右边缘
+    // [导航顶栏]: 展开后盖在列表上方，左端拖动把手、右端跳顶/跳底与隐藏图标；
+    // 整条都是拖动区（按钮除外），拖动只改垂直位置，松手按指针所在半屏吸附左右边缘
     const bar = document.createElement('div');
     bar.className = 'dscf-msgnav-bar';
 
@@ -741,19 +754,19 @@ function ensureDom() {
     grip.className = 'dscf-msgnav-grip';
     grip.innerHTML = GRIP_ICON;
 
-    // [导航关闭图标]: 顶栏右侧，点击只隐藏本次页面的导航（不动识别与监听）
-    const close = document.createElement('button');
-    close.type = 'button';
-    close.className = 'dscf-msgnav-close';
-    close.title = '临时隐藏（刷新后恢复）';
-    close.setAttribute('aria-label', close.title);
-    close.innerHTML = CLOSE_ICON;
-    close.addEventListener('click', () => {
-        state.dismissed = true;
-        syncVisibility();
-    });
+    // [导航顶栏按钮]: 右端依次是跳顶、跳底、临时隐藏（只隐藏本页，不动识别与监听）
+    const tools = document.createElement('div');
+    tools.className = 'dscf-msgnav-tools';
+    tools.append(
+        createBarButton('dscf-msgnav-tool', TO_TOP_ICON, '跳到顶部', () => jumpToEdge('top')),
+        createBarButton('dscf-msgnav-tool', TO_BOTTOM_ICON, '跳到底部', () => jumpToEdge('bottom')),
+        createBarButton('dscf-msgnav-close', CLOSE_ICON, '临时隐藏（刷新后恢复）', () => {
+            state.dismissed = true;
+            syncVisibility();
+        })
+    );
 
-    bar.append(grip, close);
+    bar.append(grip, tools);
     bar.addEventListener('pointerdown', startNavDrag);
 
     const items = document.createElement('div');
@@ -816,6 +829,30 @@ const GRIP_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"
     + '<circle cx="6" cy="11.5" r="1"/><circle cx="10" cy="11.5" r="1"/>'
     + '</g>'
     + '</svg>';
+
+// [导航顶栏] 跳到顶部：一条顶端横线 + 向上箭头，和跳底图标成对
+const TO_TOP_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">'
+    + '<path d="M3.5 3.6h9M8 13.2V6.2M5.3 8.9 8 6.2l2.7 2.7" fill="none" stroke="currentColor"'
+    + ' stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>'
+    + '</svg>';
+
+// [导航顶栏] 跳到底部：一条底端横线 + 向下箭头
+const TO_BOTTOM_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">'
+    + '<path d="M3.5 12.4h9M8 2.8v7M5.3 7.1 8 9.8l2.7-2.7" fill="none" stroke="currentColor"'
+    + ' stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>'
+    + '</svg>';
+
+// 顶栏图标按钮：三颗按钮只差图标与点击行为，统一样式由 .dscf-msgnav-tools button 提供
+function createBarButton(className, icon, label, onClick) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = className;
+    button.title = label;
+    button.setAttribute('aria-label', label);
+    button.innerHTML = icon;
+    button.addEventListener('click', onClick);
+    return button;
+}
 
 // 提问行的无障碍文案：有没有回答、当前是否展开，决定点击后是跳转还是也收起
 function jumpLabel(entry, expanded) {
@@ -1179,7 +1216,8 @@ function flyNavTo(side, cardLeft, cardTop) {
 // 松手按卡片中线所在半屏吸附左/右边缘并滑过去。事件挂到 window，指针移出胶囊也不丢
 function startNavDrag(event) {
     if (event.button !== 0 || !state.root || !state.bar || !state.card) return;
-    if (event.target.closest?.('.dscf-msgnav-close')) return;
+    // 顶栏上的按钮各自处理点击，按下时不要起拖
+    if (event.target.closest?.('button')) return;
 
     // 飞行途中再次按下：停在当前视觉位置，从半路接着拖
     clearTimeout(state.flyTimer);

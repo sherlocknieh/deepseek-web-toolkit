@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 修复+优化
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.28.1858
+// @version      2026.11.28.1903
 // @author       sherlocknieh
 // @description  优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。
 // @license      MIT
@@ -368,9 +368,16 @@
             height: 10px;
         }
 
-        /* [导航关闭图标]: 顶栏右端，点击只隐藏本页的导航（刷新后恢复），不写存储 */
-        .dscf-msgnav-close {
+        /* [导航顶栏按钮]: 右端的跳顶、跳底与隐藏共用一套 18×18 图标按钮；
+           隐藏只躲本页的导航（刷新后恢复），不写存储 */
+        .dscf-msgnav-tools {
             margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+
+        .dscf-msgnav-tools button {
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -386,14 +393,14 @@
             transition: opacity 0.1s ease, color 0.2s ease, background-color 0.2s ease;
         }
 
-        .dscf-msgnav-close svg {
+        .dscf-msgnav-tools button svg {
             display: block;
             width: 11px;
             height: 11px;
         }
 
-        .dscf-msgnav-close:hover,
-        .dscf-msgnav-close:focus-visible {
+        .dscf-msgnav-tools button:hover,
+        .dscf-msgnav-tools button:focus-visible {
             opacity: 1;
             color: var(--dscf-nav-hover);
             background-color: rgba(103, 112, 254, 0.16);
@@ -2388,6 +2395,15 @@
 			if (block) jumpToKey(key, block, activeKey, reply, false);
 		}, 400);
 	}
+	function jumpToEdge(where) {
+		const scroller = state.scroller;
+		if (!scroller) return;
+		state.jumpLocked = false;
+		state.awaitScroll = false;
+		const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+		scroller.scrollTop = where === "top" ? 0 : max;
+		updateActive();
+	}
 	function roundedImageBox(block) {
 		const img = block.querySelector("img");
 		if (!img) return null;
@@ -2492,17 +2508,13 @@
 		const grip = document.createElement("span");
 		grip.className = "dscf-msgnav-grip";
 		grip.innerHTML = GRIP_ICON;
-		const close = document.createElement("button");
-		close.type = "button";
-		close.className = "dscf-msgnav-close";
-		close.title = "临时隐藏（刷新后恢复）";
-		close.setAttribute("aria-label", close.title);
-		close.innerHTML = CLOSE_ICON;
-		close.addEventListener("click", () => {
+		const tools = document.createElement("div");
+		tools.className = "dscf-msgnav-tools";
+		tools.append(createBarButton("dscf-msgnav-tool", TO_TOP_ICON, "跳到顶部", () => jumpToEdge("top")), createBarButton("dscf-msgnav-tool", TO_BOTTOM_ICON, "跳到底部", () => jumpToEdge("bottom")), createBarButton("dscf-msgnav-close", CLOSE_ICON, "临时隐藏（刷新后恢复）", () => {
 			state.dismissed = true;
 			syncVisibility();
-		});
-		bar.append(grip, close);
+		}));
+		bar.append(grip, tools);
 		bar.addEventListener("pointerdown", startNavDrag);
 		const items = document.createElement("div");
 		items.className = "dscf-msgnav-items";
@@ -2534,6 +2546,18 @@
 	var CARET_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M6.2 3.6 10.6 8l-4.4 4.4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>";
 	var CLOSE_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\" stroke-linecap=\"round\"/></svg>";
 	var GRIP_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><g fill=\"currentColor\"><circle cx=\"6\" cy=\"4.5\" r=\"1\"/><circle cx=\"10\" cy=\"4.5\" r=\"1\"/><circle cx=\"6\" cy=\"8\" r=\"1\"/><circle cx=\"10\" cy=\"8\" r=\"1\"/><circle cx=\"6\" cy=\"11.5\" r=\"1\"/><circle cx=\"10\" cy=\"11.5\" r=\"1\"/></g></svg>";
+	var TO_TOP_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M3.5 3.6h9M8 13.2V6.2M5.3 8.9 8 6.2l2.7 2.7\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>";
+	var TO_BOTTOM_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M3.5 12.4h9M8 2.8v7M5.3 7.1 8 9.8l2.7-2.7\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>";
+	function createBarButton(className, icon, label, onClick) {
+		const button = document.createElement("button");
+		button.type = "button";
+		button.className = className;
+		button.title = label;
+		button.setAttribute("aria-label", label);
+		button.innerHTML = icon;
+		button.addEventListener("click", onClick);
+		return button;
+	}
 	function jumpLabel(entry, expanded) {
 		const text = entry.text || "（无正文）";
 		if (!entry.replies.length) return "跳到提问：" + text;
@@ -2794,7 +2818,7 @@
 	}
 	function startNavDrag(event) {
 		if (event.button !== 0 || !state.root || !state.bar || !state.card) return;
-		if (event.target.closest?.(".dscf-msgnav-close")) return;
+		if (event.target.closest?.("button")) return;
 		clearTimeout(state.flyTimer);
 		state.flyTimer = null;
 		state.root.classList.remove("is-flying");
