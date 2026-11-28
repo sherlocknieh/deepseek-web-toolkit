@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 修复+优化
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.28.1450
+// @version      2026.11.28.1500
 // @author       sherlocknieh
 // @description  优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。
 // @license      MIT
@@ -282,7 +282,7 @@
         }
 
         .dscf-msgnav.is-left .dscf-msgnav-items {
-            padding: 6px 24px 15px 6px;
+            padding: 6px;
         }
 
         .dscf-msgnav.is-left .dscf-msgnav-item {
@@ -336,7 +336,7 @@
             display: flex;
             align-items: center;
             height: 28px;
-            padding: 0 6px 0 24px;
+            padding: 0 6px 0;
             box-sizing: border-box;
             border-bottom: 1px solid var(--dscf-nav-divider);
             cursor: grab;
@@ -1997,6 +1997,11 @@
 	var FLASH_MS = 600;
 	var NAV_EDGE = 16;
 	var MIN_ENTRIES = 1;
+	function deepseekAnswerRoots(el) {
+		const body = el.querySelector(".ds-assistant-message-main-content");
+		if (body) return [body];
+		return Array.from(el.querySelectorAll(".ds-markdown")).filter((node) => !node.parentElement.closest(".ds-markdown") && !node.closest(".ds-think-content"));
+	}
 	var SITE_ADAPTERS = [
 		{
 			hosts: ["chatgpt.com", "chat.openai.com"],
@@ -2029,11 +2034,11 @@
 			hosts: ["chat.deepseek.com"],
 			selector: "[data-virtual-list-item-key]",
 			role: (el) => el.querySelector(".ds-markdown") ? "ASSISTANT" : "USER",
-			content: (el) => el.querySelector(".ds-message") || el,
+			content: (el) => deepseekAnswerRoots(el)[0] || el.querySelector(".ds-message") || el,
 			bubble: (el) => Array.from(el.querySelectorAll(".ds-message > div")).find((node) => (node.innerText || "").trim()),
 			replyAnchor: (el) => {
-				const answer = Array.from(el.querySelectorAll(".ds-markdown")).find((node) => !node.parentElement.closest(".ds-markdown") && !node.closest(".ds-think-content"));
-				return answer && (answer.firstElementChild || answer);
+				const [root] = deepseekAnswerRoots(el);
+				return root && (root.firstElementChild || root);
 			},
 			scroller: ".ds-scroll-area"
 		},
@@ -2332,7 +2337,7 @@
 		const close = document.createElement("button");
 		close.type = "button";
 		close.className = "dscf-msgnav-close";
-		close.title = "关闭导航（刷新后恢复）";
+		close.title = "临时隐藏（刷新后恢复）";
 		close.setAttribute("aria-label", close.title);
 		close.innerHTML = CLOSE_ICON;
 		close.addEventListener("click", () => {

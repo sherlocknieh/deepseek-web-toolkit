@@ -22,6 +22,16 @@ const NAV_FLY_MS = 260;
 const NAV_EDGE = 16;
 const MIN_ENTRIES = 1;
 
+// DeepSeek 回答正文的根：正文和思考栏分开挂，专用容器里不含思考栏；
+// 老版本没有这层时退回「最外层、不在思考区里的 .ds-markdown」
+function deepseekAnswerRoots(el) {
+    const body = el.querySelector('.ds-assistant-message-main-content');
+    if (body) return [body];
+    return Array.from(el.querySelectorAll('.ds-markdown'))
+        .filter(node => !node.parentElement.closest('.ds-markdown')
+            && !node.closest('.ds-think-content'));
+}
+
 // 站点适配：每种站点只声明自己的消息块选择器、角色判定、正文范围和滚动容器。
 // 不共用一个“全能选择器”，否则外层容器和它的子元素会同时命中，同一条消息被数两次
 const SITE_ADAPTERS = [
@@ -64,19 +74,18 @@ const SITE_ADAPTERS = [
         // 每条消息是一个虚拟列表项；回答里有 .ds-markdown（思考区也在里面），提问只有纯文本气泡
         selector: '[data-virtual-list-item-key]',
         role: el => (el.querySelector('.ds-markdown') ? 'ASSISTANT' : 'USER'),
-        content: el => el.querySelector('.ds-message') || el,
+        // 预览只读回答正文：思考栏（「已思考（用时 1 秒）」）在正文容器外面，
+        // 折叠后思考内容还会从 DOM 消失，靠剔除 .ds-think-content 去不干净
+        content: el => deepseekAnswerRoots(el)[0] || el.querySelector('.ds-message') || el,
         // .ds-message 是满宽的行，气泡是它内部按内容撑开的一层；带附件时图片和文字各占一块，
         // 有正文就落在文字气泡上，纯图片交给圆角图片框兜底
         bubble: el => Array.from(el.querySelectorAll('.ds-message > div'))
             .find(node => (node.innerText || '').trim()),
         // 回答的跳转落点：消息块顶端是思考栏，对齐它只会看到「已思考」标题，
-        // 正文被推到下面。取不在思考区里的第一块 .ds-markdown，落到它的首个子元素，
-        // 光晕也正好圈住回答开头
+        // 正文被推到下面。从正文根的首个子元素开始，光晕也正好圈住回答开头
         replyAnchor: el => {
-            const answer = Array.from(el.querySelectorAll('.ds-markdown'))
-                .find(node => !node.parentElement.closest('.ds-markdown')
-                    && !node.closest('.ds-think-content'));
-            return answer && (answer.firstElementChild || answer);
+            const [root] = deepseekAnswerRoots(el);
+            return root && (root.firstElementChild || root);
         },
         scroller: '.ds-scroll-area'
     },
@@ -544,7 +553,7 @@ function ensureDom() {
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'dscf-msgnav-close';
-    close.title = '关闭导航（刷新后恢复）';
+    close.title = '临时隐藏（刷新后恢复）';
     close.setAttribute('aria-label', close.title);
     close.innerHTML = CLOSE_ICON;
     close.addEventListener('click', () => {

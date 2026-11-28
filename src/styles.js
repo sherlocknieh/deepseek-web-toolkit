@@ -196,7 +196,7 @@ export function addCSSClass() {
         }
 
         .dscf-msgnav.is-left .dscf-msgnav-items {
-            padding: 6px 24px 15px 6px;
+            padding: 6px;
         }
 
         .dscf-msgnav.is-left .dscf-msgnav-item {
@@ -250,7 +250,7 @@ export function addCSSClass() {
             display: flex;
             align-items: center;
             height: 28px;
-            padding: 0 6px 0 24px;
+            padding: 0 6px 0;
             box-sizing: border-box;
             border-bottom: 1px solid var(--dscf-nav-divider);
             cursor: grab;
