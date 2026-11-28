@@ -174,6 +174,7 @@ export function addCSSClass() {
             --dscf-nav-line: rgba(0, 0, 0, 0.16);
             --dscf-nav-divider: rgba(0, 0, 0, 0.08);
             --dscf-nav-active: #3964fe;
+            --dscf-nav-active-soft: rgba(57, 100, 254, 0.14);
             position: fixed;
             top: 50%;
             right: 16px;
@@ -230,7 +231,7 @@ export function addCSSClass() {
             max-height: min(322px, calc(100vh - 32px));
             box-sizing: border-box;
             border: 1px solid transparent;
-            border-radius: 16px;
+            border-radius: 6px;
             overflow: hidden;
             pointer-events: none;
             transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
@@ -327,7 +328,7 @@ export function addCSSClass() {
         .dscf-msgnav-items {
             flex: 0 1 auto;
             max-height: 290px;
-            padding: 6px 6px 15px 24px;
+            padding: 6px;
             box-sizing: border-box;
             overflow-y: auto;
             scrollbar-width: none;
@@ -432,21 +433,25 @@ export function addCSSClass() {
             opacity: 1;
         }
 
-        /* 展开时两个按钮一起露面：当前预览侧全亮，另一侧只留一半亮度作提示 */
+        /* 展开时两个按钮一起露面：选中侧用品牌色图标 + 淡品牌底标出，
+           未选中侧压到 0.35 亮度且没有底色，扫一眼就能看出当前预览哪一侧 */
         .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-role {
-            opacity: 0.45;
+            opacity: 0.35;
         }
 
         .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-item:not(.is-showing-answer) .dscf-msgnav-role-question,
         .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-item.is-showing-answer .dscf-msgnav-role-answer {
             opacity: 1;
+            color: var(--dscf-nav-active);
+            background-color: var(--dscf-nav-active-soft);
         }
 
+        /* 悬停未选中侧：只补一层淡底提示可点，选中侧的底色由上面的规则固定 */
         .dscf-msgnav:hover .dscf-msgnav-role:hover,
         .dscf-msgnav:has(:focus-visible) .dscf-msgnav-role:focus-visible {
             opacity: 1;
             color: var(--dscf-nav-hover);
-            background-color: rgba(103, 112, 254, 0.16);
+            background-color: var(--dscf-nav-active-soft);
         }
 
         /* 回答还没出现：答按钮不占位，问按钮旁边只留它自己 */
@@ -514,6 +519,7 @@ export function addCSSClass() {
             --dscf-nav-line: rgba(255, 255, 255, 0.2);
             --dscf-nav-divider: rgba(255, 255, 255, 0.08);
             --dscf-nav-active: #679efe;
+            --dscf-nav-active-soft: rgba(103, 158, 254, 0.22);
         }
 
         /* 跳转目标的气泡边缘发光：只画光圈不铺底色，正文颜色不受影响。
