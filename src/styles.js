@@ -195,6 +195,7 @@ export function addCSSClass() {
         /* 列表宽度固定 240：收起时透明、只漏出右侧横线，展开时条目不再横向跳动。
            高度由条目内容决定，容器不再撑到固定 300px */
         .dscf-msgnav-list {
+            position: relative;
             flex: 0 0 240px;
             display: flex;
             flex-direction: column;
@@ -213,6 +214,47 @@ export function addCSSClass() {
             border-color: var(--dscf-nav-border);
             box-shadow: var(--dscf-nav-shadow);
             pointer-events: auto;
+        }
+
+        /* [导航关闭图标]: 悬浮在面板右上角，只在展开时露面；点击只隐藏本页的导航，
+           刷新后恢复，所以不需要常驻位置或额外恢复入口 */
+        .dscf-msgnav-close {
+            position: absolute;
+            top: 2px;
+            right: 6px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            padding: 0;
+            border: 0;
+            border-radius: 4px;
+            background: transparent;
+            color: var(--dscf-nav-title);
+            cursor: pointer;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.1s ease, color 0.2s ease, background-color 0.2s ease;
+        }
+
+        .dscf-msgnav-close svg {
+            display: block;
+            width: 11px;
+            height: 11px;
+        }
+
+        .dscf-msgnav:hover .dscf-msgnav-close,
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-close {
+            opacity: 0.7;
+            pointer-events: auto;
+        }
+
+        .dscf-msgnav-close:hover,
+        .dscf-msgnav-close:focus-visible {
+            opacity: 1;
+            color: var(--dscf-nav-hover);
+            background-color: rgba(103, 112, 254, 0.16);
         }
 
         /* 列表高度随条目走，最多撑满容器；条目整体垂直居中 */

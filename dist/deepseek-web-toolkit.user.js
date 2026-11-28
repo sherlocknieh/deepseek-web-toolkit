@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 修复+优化
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.27.2338
+// @version      2026.11.28.1428
 // @author       sherlocknieh
 // @description  优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。
 // @license      MIT
@@ -280,6 +280,7 @@
         /* 列表宽度固定 240：收起时透明、只漏出右侧横线，展开时条目不再横向跳动。
            高度由条目内容决定，容器不再撑到固定 300px */
         .dscf-msgnav-list {
+            position: relative;
             flex: 0 0 240px;
             display: flex;
             flex-direction: column;
@@ -298,6 +299,47 @@
             border-color: var(--dscf-nav-border);
             box-shadow: var(--dscf-nav-shadow);
             pointer-events: auto;
+        }
+
+        /* [导航关闭图标]: 悬浮在面板右上角，只在展开时露面；点击只隐藏本页的导航，
+           刷新后恢复，所以不需要常驻位置或额外恢复入口 */
+        .dscf-msgnav-close {
+            position: absolute;
+            top: 2px;
+            right: 6px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            padding: 0;
+            border: 0;
+            border-radius: 4px;
+            background: transparent;
+            color: var(--dscf-nav-title);
+            cursor: pointer;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.1s ease, color 0.2s ease, background-color 0.2s ease;
+        }
+
+        .dscf-msgnav-close svg {
+            display: block;
+            width: 11px;
+            height: 11px;
+        }
+
+        .dscf-msgnav:hover .dscf-msgnav-close,
+        .dscf-msgnav:has(:focus-visible) .dscf-msgnav-close {
+            opacity: 0.7;
+            pointer-events: auto;
+        }
+
+        .dscf-msgnav-close:hover,
+        .dscf-msgnav-close:focus-visible {
+            opacity: 1;
+            color: var(--dscf-nav-hover);
+            background-color: rgba(103, 112, 254, 0.16);
         }
 
         /* 列表高度随条目走，最多撑满容器；条目整体垂直居中 */
@@ -1988,7 +2030,8 @@
 		jumpLocked: false,
 		awaitScroll: false,
 		onIntent: null,
-		answerPreview: new Set()
+		answerPreview: new Set(),
+		dismissed: false
 	};
 	function readText(el) {
 		const clone = (ADAPTER && ADAPTER.content ? ADAPTER.content(el) : el).cloneNode(true);
@@ -2212,6 +2255,17 @@
 		const items = document.createElement("div");
 		items.className = "dscf-msgnav-items";
 		list.append(items);
+		const close = document.createElement("button");
+		close.type = "button";
+		close.className = "dscf-msgnav-close";
+		close.title = "关闭导航（刷新后恢复）";
+		close.setAttribute("aria-label", close.title);
+		close.innerHTML = CLOSE_ICON;
+		close.addEventListener("click", () => {
+			state.dismissed = true;
+			syncVisibility();
+		});
+		list.append(close);
 		root.append(list);
 		document.body.appendChild(root);
 		state.root = root;
@@ -2219,6 +2273,7 @@
 	}
 	var QUESTION_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><circle cx=\"8\" cy=\"8\" r=\"6.2\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\"/><path d=\"M6.1 6.2a1.9 1.9 0 1 1 2.6 1.8c-.45.2-.7.5-.7 1v.2\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\" stroke-linecap=\"round\"/><circle cx=\"8\" cy=\"11.1\" r=\".75\" fill=\"currentColor\"/></svg>";
 	var ANSWER_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M3.1 3.2h9.8a1.2 1.2 0 0 1 1.2 1.2v5.1a1.2 1.2 0 0 1-1.2 1.2H7.6L4.6 13.2v-2.5H3.1a1.2 1.2 0 0 1-1.2-1.2V4.4a1.2 1.2 0 0 1 1.2-1.2Z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\" stroke-linejoin=\"round\"/><path d=\"M4.8 6h6.4M4.8 8.1h4.3\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\" stroke-linecap=\"round\"/></svg>";
+	var CLOSE_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\" stroke-linecap=\"round\"/></svg>";
 	function isShowingAnswer(entry) {
 		return Boolean(entry.replyKey) && state.answerPreview.has(entry.key);
 	}
@@ -2333,7 +2388,7 @@
 	}
 	function syncVisibility() {
 		if (!state.root) return;
-		state.root.classList.toggle("is-visible", state.entries.length >= MIN_ENTRIES);
+		state.root.classList.toggle("is-visible", !state.dismissed && state.entries.length >= MIN_ENTRIES);
 	}
 	function clearMessageNav() {
 		detachScroller();
@@ -2448,6 +2503,7 @@
 		state.signature = "";
 		state.topInset = 0;
 		state.answerPreview.clear();
+		state.dismissed = false;
 		if (runtime.refreshMessageNav === refreshMessageNav) runtime.refreshMessageNav = null;
 	}
 	var THINK_SELECTOR = ".ds-think-content";

@@ -167,7 +167,9 @@ const state = {
     awaitScroll: false,
     onIntent: null,
     // 当前切成「回答预览」的提问 key；切回提问时移除，列表重画后仍按它恢复模式
-    answerPreview: new Set()
+    answerPreview: new Set(),
+    // 用户点了关闭图标：只隐藏本次页面的导航，刷新后重新识别即恢复
+    dismissed: false
 };
 
 // 取消息正文：先按站点收敛到气泡元素，再去掉按钮和工具栏文案后压成单行
@@ -521,6 +523,19 @@ function ensureDom() {
     items.className = 'dscf-msgnav-items';
     list.append(items);
 
+    // [导航关闭图标]: 展开时浮在面板右上角，点击只隐藏本次页面的导航（不动识别与监听）
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'dscf-msgnav-close';
+    close.title = '关闭导航（刷新后恢复）';
+    close.setAttribute('aria-label', close.title);
+    close.innerHTML = CLOSE_ICON;
+    close.addEventListener('click', () => {
+        state.dismissed = true;
+        syncVisibility();
+    });
+    list.append(close);
+
     root.append(list);
     document.body.appendChild(root);
 
@@ -542,6 +557,11 @@ const ANSWER_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="fals
     + ' fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>'
     + '<path d="M4.8 6h6.4M4.8 8.1h4.3" fill="none" stroke="currentColor"'
     + ' stroke-width="1.3" stroke-linecap="round"/>'
+    + '</svg>';
+
+const CLOSE_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">'
+    + '<path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2" fill="none" stroke="currentColor"'
+    + ' stroke-width="1.4" stroke-linecap="round"/>'
     + '</svg>';
 
 // 行内预览在提问和回答之间切换：文字右侧「提问 / 回答」两个按钮始终并排，
@@ -715,9 +735,13 @@ function syncEntryTexts() {
     });
 }
 
+// 可见性由条目数量与关闭标记共同决定：关闭只做本页隐藏，刷新后重新识别即恢复
 function syncVisibility() {
     if (!state.root) return;
-    state.root.classList.toggle('is-visible', state.entries.length >= MIN_ENTRIES);
+    state.root.classList.toggle(
+        'is-visible',
+        !state.dismissed && state.entries.length >= MIN_ENTRIES
+    );
 }
 
 function clearMessageNav() {
@@ -857,6 +881,7 @@ export function teardownMessageNav() {
     state.signature = '';
     state.topInset = 0;
     state.answerPreview.clear();
+    state.dismissed = false;
 
     if (runtime.refreshMessageNav === refreshMessageNav) {
         runtime.refreshMessageNav = null;
