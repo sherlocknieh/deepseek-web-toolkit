@@ -199,6 +199,8 @@ const state = {
     // 用户已动手要滚，等下一次滚动事件到来才解锁
     awaitScroll: false,
     onIntent: null,
+    // 指针移动的跟踪函数：按实际位置开关展开态，重画/重渲染都不会误收
+    onNavMove: null,
     // 当前切成「回答预览」的提问 key；切回提问时移除，列表重画后仍按它恢复模式
     answerPreview: new Set(),
     // 多条独立回答时，每条提问当前选中的回答 key（默认第一条）
@@ -726,21 +728,38 @@ function ensureDom() {
     root.append(card);
     document.body.appendChild(root);
 
-    // 鼠标只要还在面板上就用 is-open 锁住展开态：站点重渲染时浏览器可能重算 :hover，
-    // 纯 CSS 的 :hover 会中途断掉，面板就在手底下自己收起。触屏没有 hover，
+    // 展开态不靠 :hover 单独维持：站点重渲染时浏览器可能重算 hover，纯 CSS 会把手底下的
+    // 面板收起。改为按指针实际位置跟踪——进入即展开，指针真的移到面板外才收起；
+    // 不用 pointerleave 判定，DOM 重建把它误触发时也不会误收。触屏没有 hover，
     // 保持原来的点击行为，免得点一下就锁在展开态
     if (window.matchMedia('(hover: hover)').matches) {
         root.addEventListener('pointerenter', () => root.classList.add('is-open'));
-        root.addEventListener('pointerleave', () => {
-            if (state.drag || state.flyTimer) return;
-            root.classList.remove('is-open');
-        });
+        state.onNavMove = trackNavHover;
+        window.addEventListener('pointermove', state.onNavMove, { passive: true });
     }
 
     state.root = root;
     state.list = items;
     state.card = card;
     state.bar = bar;
+}
+
+// 指针是否落在导航上：收起时只认右侧那一条横线区域（面板整体透明、不接事件），
+// 展开后连同整块面板都算
+function navPointInside(x, y) {
+    if (!state.root || !state.card) return false;
+    const strip = state.root.getBoundingClientRect();
+    if (x >= strip.left && x <= strip.right && y >= strip.top && y <= strip.bottom) return true;
+    if (!state.root.classList.contains('is-open')) return false;
+    const card = state.card.getBoundingClientRect();
+    return x >= card.left && x <= card.right && y >= card.top && y <= card.bottom;
+}
+
+// 指针每次移动都按坐标重算展开态：只要还在面板上就保持展开，
+// 真正移到外面才收起；不依赖 pointerleave，DOM 重建不会把它误判成离开
+function trackNavHover(event) {
+    if (!state.root || state.drag || state.flyTimer) return;
+    state.root.classList.toggle('is-open', navPointInside(event.clientX, event.clientY));
 }
 
 // 提问/回答图标：内联 SVG，不依赖 Font Awesome（其他站点不加载图标字体）。
@@ -1300,9 +1319,9 @@ function resetDiscovery() {
     state.activeKey = null;
     state.answerPreview.clear();
     state.answerReply.clear();
-    // 新会话重新从「未展示」开始：先收起，等识别到消息再出现
+    // 新会话重新从「未展示」开始；先不急着收起面板，等这次刷新读到新会话的消息再定，
+    // 免得地址栏一变就先隐一下再出现
     state.shown = false;
-    syncVisibility();
 }
 
 function attachScroller(scroller) {
@@ -1422,6 +1441,10 @@ export function teardownMessageNav() {
     detachScroller();
     stopNavDragListeners();
     window.removeEventListener('resize', rescaleNavPosition);
+    if (state.onNavMove) {
+        window.removeEventListener('pointermove', state.onNavMove);
+        state.onNavMove = null;
+    }
 
     clearTimeout(state.refreshTimer);
     state.refreshTimer = null;

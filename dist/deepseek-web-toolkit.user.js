@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 修复+优化
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.28.1822
+// @version      2026.11.28.1824
 // @author       sherlocknieh
 // @description  优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。
 // @license      MIT
@@ -2171,6 +2171,7 @@
 		jumpLocked: false,
 		awaitScroll: false,
 		onIntent: null,
+		onNavMove: null,
 		answerPreview: new Set(),
 		answerReply: new Map(),
 		dismissed: false,
@@ -2530,15 +2531,25 @@
 		document.body.appendChild(root);
 		if (window.matchMedia("(hover: hover)").matches) {
 			root.addEventListener("pointerenter", () => root.classList.add("is-open"));
-			root.addEventListener("pointerleave", () => {
-				if (state.drag || state.flyTimer) return;
-				root.classList.remove("is-open");
-			});
+			state.onNavMove = trackNavHover;
+			window.addEventListener("pointermove", state.onNavMove, { passive: true });
 		}
 		state.root = root;
 		state.list = items;
 		state.card = card;
 		state.bar = bar;
+	}
+	function navPointInside(x, y) {
+		if (!state.root || !state.card) return false;
+		const strip = state.root.getBoundingClientRect();
+		if (x >= strip.left && x <= strip.right && y >= strip.top && y <= strip.bottom) return true;
+		if (!state.root.classList.contains("is-open")) return false;
+		const card = state.card.getBoundingClientRect();
+		return x >= card.left && x <= card.right && y >= card.top && y <= card.bottom;
+	}
+	function trackNavHover(event) {
+		if (!state.root || state.drag || state.flyTimer) return;
+		state.root.classList.toggle("is-open", navPointInside(event.clientX, event.clientY));
 	}
 	var QUESTION_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><circle cx=\"8\" cy=\"8\" r=\"6.2\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\"/><path d=\"M6.1 6.2a1.9 1.9 0 1 1 2.6 1.8c-.45.2-.7.5-.7 1v.2\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\" stroke-linecap=\"round\"/><circle cx=\"8\" cy=\"11.1\" r=\".75\" fill=\"currentColor\"/></svg>";
 	var ANSWER_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M3.1 3.2h9.8a1.2 1.2 0 0 1 1.2 1.2v5.1a1.2 1.2 0 0 1-1.2 1.2H7.6L4.6 13.2v-2.5H3.1a1.2 1.2 0 0 1-1.2-1.2V4.4a1.2 1.2 0 0 1 1.2-1.2Z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\" stroke-linejoin=\"round\"/><path d=\"M4.8 6h6.4M4.8 8.1h4.3\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\" stroke-linecap=\"round\"/></svg>";
@@ -2914,7 +2925,6 @@
 		state.answerPreview.clear();
 		state.answerReply.clear();
 		state.shown = false;
-		syncVisibility();
 	}
 	function attachScroller(scroller) {
 		detachScroller();
@@ -3006,6 +3016,10 @@
 		detachScroller();
 		stopNavDragListeners();
 		window.removeEventListener("resize", rescaleNavPosition);
+		if (state.onNavMove) {
+			window.removeEventListener("pointermove", state.onNavMove);
+			state.onNavMove = null;
+		}
 		clearTimeout(state.refreshTimer);
 		state.refreshTimer = null;
 		clearInterval(state.watchTimer);
