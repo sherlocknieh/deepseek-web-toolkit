@@ -172,6 +172,7 @@ export function addCSSClass() {
             --dscf-nav-title: #81858c;
             --dscf-nav-hover: #0f1115;
             --dscf-nav-line: rgba(0, 0, 0, 0.16);
+            --dscf-nav-divider: rgba(0, 0, 0, 0.08);
             --dscf-nav-active: #3964fe;
             position: fixed;
             top: 50%;
@@ -195,7 +196,7 @@ export function addCSSClass() {
         }
 
         .dscf-msgnav.is-left .dscf-msgnav-items {
-            padding: 15px 24px 15px 6px;
+            padding: 6px 24px 15px 6px;
         }
 
         .dscf-msgnav.is-left .dscf-msgnav-item {
@@ -249,9 +250,10 @@ export function addCSSClass() {
             flex: 0 0 auto;
             display: flex;
             align-items: center;
-            height: 30px;
+            height: 28px;
             padding: 0 6px 0 24px;
             box-sizing: border-box;
+            border-bottom: 1px solid var(--dscf-nav-divider);
             cursor: grab;
             opacity: 0;
             touch-action: none;
@@ -322,7 +324,7 @@ export function addCSSClass() {
         .dscf-msgnav-items {
             flex: 0 1 auto;
             max-height: 290px;
-            padding: 15px 6px 15px 24px;
+            padding: 6px 6px 15px 24px;
             box-sizing: border-box;
             overflow-y: auto;
             scrollbar-width: none;
@@ -508,6 +510,7 @@ export function addCSSClass() {
             --dscf-nav-title: #adb2b8;
             --dscf-nav-hover: #f9fafb;
             --dscf-nav-line: rgba(255, 255, 255, 0.2);
+            --dscf-nav-divider: rgba(255, 255, 255, 0.08);
             --dscf-nav-active: #679efe;
         }
 

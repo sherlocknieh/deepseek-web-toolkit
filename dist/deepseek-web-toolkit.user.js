@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 修复+优化
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.28.1441
+// @version      2026.11.28.1444
 // @author       sherlocknieh
 // @description  优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。
 // @license      MIT
@@ -258,6 +258,7 @@
             --dscf-nav-title: #81858c;
             --dscf-nav-hover: #0f1115;
             --dscf-nav-line: rgba(0, 0, 0, 0.16);
+            --dscf-nav-divider: rgba(0, 0, 0, 0.08);
             --dscf-nav-active: #3964fe;
             position: fixed;
             top: 50%;
@@ -281,7 +282,7 @@
         }
 
         .dscf-msgnav.is-left .dscf-msgnav-items {
-            padding: 15px 24px 15px 6px;
+            padding: 6px 24px 15px 6px;
         }
 
         .dscf-msgnav.is-left .dscf-msgnav-item {
@@ -335,9 +336,10 @@
             flex: 0 0 auto;
             display: flex;
             align-items: center;
-            height: 30px;
+            height: 28px;
             padding: 0 6px 0 24px;
             box-sizing: border-box;
+            border-bottom: 1px solid var(--dscf-nav-divider);
             cursor: grab;
             opacity: 0;
             touch-action: none;
@@ -408,7 +410,7 @@
         .dscf-msgnav-items {
             flex: 0 1 auto;
             max-height: 290px;
-            padding: 15px 6px 15px 24px;
+            padding: 6px 6px 15px 24px;
             box-sizing: border-box;
             overflow-y: auto;
             scrollbar-width: none;
@@ -594,6 +596,7 @@
             --dscf-nav-title: #adb2b8;
             --dscf-nav-hover: #f9fafb;
             --dscf-nav-line: rgba(255, 255, 255, 0.2);
+            --dscf-nav-divider: rgba(255, 255, 255, 0.08);
             --dscf-nav-active: #679efe;
         }
 
