@@ -229,7 +229,7 @@ export function addCSSClass() {
             transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
         }
 
-        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-list {
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-list {
             background-color: var(--dscf-nav-solid);
             border-color: var(--dscf-nav-border);
             box-shadow: var(--dscf-nav-shadow);
@@ -252,7 +252,7 @@ export function addCSSClass() {
             transition: opacity 0.1s ease;
         }
 
-        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-bar,
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-bar,
         .dscf-msgnav.is-dragging .dscf-msgnav-bar {
             opacity: 1;
         }
@@ -421,24 +421,24 @@ export function addCSSClass() {
         }
 
         /* 展开列表（悬停或键盘聚焦）时，只让当前预览侧从 0 宽度长到整行 */
-        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-item:not(.is-showing-answer) .dscf-msgnav-text-question,
-        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-item.is-showing-answer .dscf-msgnav-text-answer {
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-item:not(.is-showing-answer) .dscf-msgnav-text-question,
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-item.is-showing-answer .dscf-msgnav-text-answer {
             flex-grow: 1;
             opacity: 1;
         }
 
         /* 展开时露出开关轨道，两个图标一起露面：选中侧是浮起的白色滑块 + 品牌色图标，
            未选中侧压到 0.4 亮度，滑块位置随预览侧在左右两格之间切换 */
-        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-roles {
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-roles {
             background-color: var(--dscf-nav-switch);
         }
 
-        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-role {
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-role {
             opacity: 0.4;
         }
 
-        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-item:not(.is-showing-answer) .dscf-msgnav-role-question,
-        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-item.is-showing-answer .dscf-msgnav-role-answer {
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-item:not(.is-showing-answer) .dscf-msgnav-role-question,
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-item.is-showing-answer .dscf-msgnav-role-answer {
             opacity: 1;
             color: var(--dscf-nav-active);
             background-color: var(--dscf-nav-thumb);
@@ -474,6 +474,7 @@ export function addCSSClass() {
         }
 
         .dscf-msgnav-item.is-sub .dscf-msgnav-roles {
+            gap: 2px;
             padding: 0;
             background-color: transparent;
         }
@@ -493,11 +494,11 @@ export function addCSSClass() {
             transition: opacity 0.1s ease, color 0.2s ease;
         }
 
-        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-subindex {
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-subindex {
             opacity: 0.55;
         }
 
-        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-item.is-sub.is-active .dscf-msgnav-subindex {
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-item.is-sub.is-active .dscf-msgnav-subindex {
             color: var(--dscf-nav-active);
             opacity: 1;
         }

@@ -205,6 +205,9 @@ const state = {
     answerReply: new Map(),
     // 用户点了关闭图标：只隐藏本次页面的导航，刷新后重新识别即恢复
     dismissed: false,
+    // 本会话是否已经展示过导航：站点重渲染时条目可能瞬间归零，已经出现过就常驻，
+    // 不跟着条目数量一隐一现；切会话时由 resetDiscovery 复位
+    shown: false,
     // 顶栏拖动后的吸附边与纵向比例（卡片顶边 / 视口高）；null 表示保持默认的右侧垂直居中
     position: null,
     // 正在拖动时的指针偏移、卡片坐标与是否越过阈值
@@ -269,6 +272,7 @@ function hintScroller(block) {
 
 // 滚动容器：优先用站点给定的容器，找不到再从消息块往上找同时装有多条消息、内容最高的可滚动区块
 function resolveScroller(blocks) {
+    if (!blocks.length) return null;
     const hinted = hintScroller(blocks[0]);
     // 短会话内容可能尚未溢出，但仍需要用站点指定的容器承载导航和后续消息变化
     if (hinted) return hinted;
@@ -722,6 +726,17 @@ function ensureDom() {
     root.append(card);
     document.body.appendChild(root);
 
+    // 鼠标只要还在面板上就用 is-open 锁住展开态：站点重渲染时浏览器可能重算 :hover，
+    // 纯 CSS 的 :hover 会中途断掉，面板就在手底下自己收起。触屏没有 hover，
+    // 保持原来的点击行为，免得点一下就锁在展开态
+    if (window.matchMedia('(hover: hover)').matches) {
+        root.addEventListener('pointerenter', () => root.classList.add('is-open'));
+        root.addEventListener('pointerleave', () => {
+            if (state.drag || state.flyTimer) return;
+            root.classList.remove('is-open');
+        });
+    }
+
     state.root = root;
     state.list = items;
     state.card = card;
@@ -811,41 +826,62 @@ function switchPreview(entry, showingAnswer) {
     }
 }
 
+// 重画条目：按 key 复用已有行、只换内容，不在悬停中整列删除重建——
+// 站点重渲染触发刷新时，鼠标停着也不会丢 hover、面板不会反复收起
 function renderItems() {
     ensureDom();
 
-    state.rows.forEach(row => row.remove());
-    state.rows = [];
-    state.rowsByKey = new Map();
+    const nextRows = [];
+    const nextByKey = new Map();
+    let cursor = state.list.firstElementChild;
+
+    // 行按文档顺序排：已在正确位置就不动，其余插到游标前，等于原地移动元素而不销毁
+    const place = row => {
+        nextRows.push(row);
+        nextByKey.set(row.dataset.key, row);
+        if (row === cursor) {
+            cursor = row.nextElementSibling;
+        } else {
+            state.list.insertBefore(row, cursor);
+        }
+    };
 
     state.entries.forEach(entry => {
-        addRow(buildItemRow(entry));
+        const row = state.rowsByKey.get(entry.key) || document.createElement('div');
+        fillItemRow(row, entry);
+        place(row);
+
         // 一个提问下有多条独立回答时，每条回答单独占一行子条目
         if (entry.replies.length > 1) {
-            entry.replies.forEach((reply, index) => addRow(buildReplyRow(entry, reply, index)));
+            entry.replies.forEach((reply, index) => {
+                const replyRow = state.rowsByKey.get(reply.key) || document.createElement('div');
+                fillReplyRow(replyRow, entry, reply, index);
+                place(replyRow);
+            });
         }
     });
+
+    // 条目消失（重新生成、切分支）才删行
+    state.rows.forEach(row => {
+        if (!nextByKey.has(row.dataset.key)) row.remove();
+    });
+
+    state.rows = nextRows;
+    state.rowsByKey = nextByKey;
 }
 
-// 父条目之后紧跟它的子条目：先按条目顺序放行，行的顺序与文档顺序一致
-function addRow(row) {
-    state.rows.push(row);
-    state.rowsByKey.set(row.dataset.key, row);
-    state.list.appendChild(row);
-}
-
-function buildItemRow(entry) {
+function fillItemRow(row, entry) {
     const showingAnswer = isShowingAnswer(entry);
     const reply = selectedReply(entry);
+    const active = entry.key === state.activeKey;
 
     // 行本身是容器：非当前条目的正文区点击只跳过去，当前条目才切换提问/回答预览；
-    // 右侧并排提问/回答两个按钮，按钮不能互相嵌套
-    const row = document.createElement('div');
+    // 行首并排提问/回答两个按钮，按钮不能互相嵌套
     row.className = 'dscf-msgnav-item';
-    const active = entry.key === state.activeKey;
     row.classList.toggle('is-active', active);
     row.classList.toggle('is-showing-answer', showingAnswer);
     row.dataset.key = entry.key;
+    delete row.dataset.parentKey;
 
     const jump = document.createElement('button');
     jump.type = 'button';
@@ -899,12 +935,12 @@ function buildItemRow(entry) {
 
     roles.append(questionRole, answerRole);
 
-    row.append(roles, jump, indicator);
+    row.replaceChildren(roles, jump, indicator);
 
     // 整行都是命中区：开关、正文、最右侧的横线。横线只是装饰元素，
     // 点击挂在行上才不会在横线那 16px 上留死区。点非当前条目只跳过去、保持它已有的
     // 预览侧；点当前条目才在提问/回答之间切换，回答未出现时只能跳回提问
-    row.addEventListener('click', event => {
+    row.onclick = event => {
         // 开关那一段有自己的语义，在它们身上点完就不再当成行点击
         if (event.target.closest('.dscf-msgnav-roles')) return;
         if (entry.key !== state.activeKey) {
@@ -918,14 +954,11 @@ function buildItemRow(entry) {
         } else {
             jumpTo(entry);
         }
-    });
-
-    return row;
+    };
 }
 
-// 子条目：一条独立回答。行首序号区分「同一提问的第几条回答」，点击切到这条回答并跳过去
-function buildReplyRow(entry, reply, index) {
-    const row = document.createElement('div');
+// 子条目：一条独立回答。行首是回答按钮 + 序号（同一提问的第几条），点击切到这条回答并跳过去
+function fillReplyRow(row, entry, reply, index) {
     row.className = 'dscf-msgnav-item is-sub is-showing-answer';
     row.classList.toggle('is-active', reply.key === state.activeKey);
     row.dataset.key = reply.key;
@@ -933,15 +966,27 @@ function buildReplyRow(entry, reply, index) {
 
     const roles = document.createElement('span');
     roles.className = 'dscf-msgnav-roles';
+
+    // 每条回答都带自己的回答按钮：和父行的回答开关同一个图标，点了就切到这一条
+    const answerRole = document.createElement('button');
+    answerRole.type = 'button';
+    answerRole.className = 'dscf-msgnav-role dscf-msgnav-role-answer';
+    answerRole.title = '跳到这条回答';
+    answerRole.setAttribute('aria-label', '跳到第 ' + (index + 1) + ' 条回答：' + (reply.text || '（无正文）'));
+    answerRole.setAttribute('aria-pressed', 'true');
+    answerRole.innerHTML = ANSWER_ICON;
+    answerRole.addEventListener('click', () => openReply(entry, reply));
+
     const order = document.createElement('span');
     order.className = 'dscf-msgnav-subindex';
     order.textContent = String(index + 1);
-    roles.append(order);
+
+    roles.append(answerRole, order);
 
     const jump = document.createElement('button');
     jump.type = 'button';
     jump.className = 'dscf-msgnav-jump';
-    jump.setAttribute('aria-label', '跳到回答 ' + (index + 1) + '：' + (reply.text || '（无正文）'));
+    jump.setAttribute('aria-label', '跳到第 ' + (index + 1) + ' 条回答：' + (reply.text || '（无正文）'));
 
     const preview = document.createElement('span');
     preview.className = 'dscf-msgnav-preview';
@@ -958,17 +1003,21 @@ function buildReplyRow(entry, reply, index) {
     line.className = 'dscf-msgnav-line';
     indicator.append(line);
 
-    row.append(roles, jump, indicator);
+    row.replaceChildren(roles, jump, indicator);
 
     // 选中这条回答：父行跟着切到回答预览，跳转和光晕都落在这一条上
-    row.addEventListener('click', () => {
-        state.answerReply.set(entry.key, reply.key);
-        state.answerPreview.add(entry.key);
-        applyAnswerPreview(entry, true);
-        jumpToKey(reply.key, reply.el, reply.key, true);
-    });
+    row.onclick = event => {
+        if (event.target.closest('.dscf-msgnav-roles')) return;
+        openReply(entry, reply);
+    };
+}
 
-    return row;
+// 把某条回答设为该提问的当前回答，并跳过去
+function openReply(entry, reply) {
+    state.answerReply.set(entry.key, reply.key);
+    state.answerPreview.add(entry.key);
+    applyAnswerPreview(entry, true);
+    jumpToKey(reply.key, reply.el, reply.key, true);
 }
 
 // 回答流式输出时正文一直在变，签名不变就只把最新文字写回现有行，避免整列重画打断操作
@@ -1012,13 +1061,15 @@ function setRowText(node, text, empty) {
     node.title = text || '';
 }
 
-// 可见性由条目数量与关闭标记共同决定：关闭只做本页隐藏，刷新后重新识别即恢复
+// 可见性由已展示标记与关闭标记共同决定：识别到第一条提问后常驻，
+// 站点重渲染导致条目暂时归零也不收起；关闭只做本页隐藏，刷新后重新识别即恢复
 function syncVisibility() {
     if (!state.root) return;
-    state.root.classList.toggle(
-        'is-visible',
-        !state.dismissed && state.entries.length >= MIN_ENTRIES
-    );
+    if (state.entries.length >= MIN_ENTRIES) state.shown = true;
+    const visible = !state.dismissed && state.shown;
+    // 收起时一并放掉悬停锁定，下次展开重新按指针位置决定
+    if (!visible) state.root.classList.remove('is-open');
+    state.root.classList.toggle('is-visible', visible);
 }
 
 // 位置存吸附边与纵向比例；比例以视口高度为分母，手机版/电脑版切换、横竖屏旋转、
@@ -1143,6 +1194,8 @@ function flyNavTo(side, cardLeft, cardTop) {
     state.flyTimer = setTimeout(() => {
         state.flyTimer = null;
         state.root?.classList.remove('is-flying');
+        // 飞行途中指针可能已经离开面板（拖动期间不处理 pointerleave），落地后补一次判断
+        if (state.root && !state.root.matches(':hover')) state.root.classList.remove('is-open');
     }, NAV_FLY_MS + 60);
 }
 
@@ -1247,6 +1300,9 @@ function resetDiscovery() {
     state.activeKey = null;
     state.answerPreview.clear();
     state.answerReply.clear();
+    // 新会话重新从「未展示」开始：先收起，等识别到消息再出现
+    state.shown = false;
+    syncVisibility();
 }
 
 function attachScroller(scroller) {
@@ -1294,7 +1350,9 @@ export function refreshMessageNav() {
     const entries = mergePass(readPass());
 
     if (entries.length < MIN_ENTRIES) {
-        clearMessageNav();
+        // 已发现过消息时，这一轮读不到多半是站点正在重渲染：保留面板和悬停态，
+        // 等下一次刷新补回来；只有清单真为空（首次加载、空会话）才收起来
+        if (!state.items.length) clearMessageNav();
         return;
     }
 
@@ -1302,8 +1360,7 @@ export function refreshMessageNav() {
     const mounted = state.items.map(item => item.el).filter(el => el && el.isConnected);
     const scroller = resolveScroller(mounted);
     if (!scroller) {
-        // 页面还没排好版时可能暂时找不到滚动容器，隔一会儿再认一次
-        clearMessageNav();
+        // 滚动容器暂时找不到（站点重排、切会话中途）也一样先不撤面板，低频重试
         scheduleWatch();
         return;
     }
@@ -1393,6 +1450,7 @@ export function teardownMessageNav() {
     state.answerReply.clear();
     identity = createIdentity();
     state.dismissed = false;
+    state.shown = false;
     state.position = null;
     state.drag = null;
     clearTimeout(state.flyTimer);

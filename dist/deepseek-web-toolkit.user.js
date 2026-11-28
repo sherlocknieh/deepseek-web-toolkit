@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 修复+优化
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.28.1807
+// @version      2026.11.28.1822
 // @author       sherlocknieh
 // @description  优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。
 // @license      MIT
@@ -315,7 +315,7 @@
             transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
         }
 
-        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-list {
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-list {
             background-color: var(--dscf-nav-solid);
             border-color: var(--dscf-nav-border);
             box-shadow: var(--dscf-nav-shadow);
@@ -338,7 +338,7 @@
             transition: opacity 0.1s ease;
         }
 
-        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-bar,
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-bar,
         .dscf-msgnav.is-dragging .dscf-msgnav-bar {
             opacity: 1;
         }
@@ -507,24 +507,24 @@
         }
 
         /* 展开列表（悬停或键盘聚焦）时，只让当前预览侧从 0 宽度长到整行 */
-        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-item:not(.is-showing-answer) .dscf-msgnav-text-question,
-        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-item.is-showing-answer .dscf-msgnav-text-answer {
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-item:not(.is-showing-answer) .dscf-msgnav-text-question,
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-item.is-showing-answer .dscf-msgnav-text-answer {
             flex-grow: 1;
             opacity: 1;
         }
 
         /* 展开时露出开关轨道，两个图标一起露面：选中侧是浮起的白色滑块 + 品牌色图标，
            未选中侧压到 0.4 亮度，滑块位置随预览侧在左右两格之间切换 */
-        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-roles {
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-roles {
             background-color: var(--dscf-nav-switch);
         }
 
-        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-role {
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-role {
             opacity: 0.4;
         }
 
-        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-item:not(.is-showing-answer) .dscf-msgnav-role-question,
-        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-item.is-showing-answer .dscf-msgnav-role-answer {
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-item:not(.is-showing-answer) .dscf-msgnav-role-question,
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-item.is-showing-answer .dscf-msgnav-role-answer {
             opacity: 1;
             color: var(--dscf-nav-active);
             background-color: var(--dscf-nav-thumb);
@@ -560,6 +560,7 @@
         }
 
         .dscf-msgnav-item.is-sub .dscf-msgnav-roles {
+            gap: 2px;
             padding: 0;
             background-color: transparent;
         }
@@ -579,11 +580,11 @@
             transition: opacity 0.1s ease, color 0.2s ease;
         }
 
-        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-subindex {
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-subindex {
             opacity: 0.55;
         }
 
-        .dscf-msgnav:is(:hover, :has(:focus-visible), .is-flying) .dscf-msgnav-item.is-sub.is-active .dscf-msgnav-subindex {
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-item.is-sub.is-active .dscf-msgnav-subindex {
             color: var(--dscf-nav-active);
             opacity: 1;
         }
@@ -2173,6 +2174,7 @@
 		answerPreview: new Set(),
 		answerReply: new Map(),
 		dismissed: false,
+		shown: false,
 		position: null,
 		drag: null,
 		flyTimer: null,
@@ -2211,6 +2213,7 @@
 		return typeof ADAPTER.scroller === "function" ? ADAPTER.scroller(block) : block.closest(ADAPTER.scroller);
 	}
 	function resolveScroller(blocks) {
+		if (!blocks.length) return null;
 		const hinted = hintScroller(blocks[0]);
 		if (hinted) return hinted;
 		let best = null;
@@ -2525,6 +2528,13 @@
 		card.append(bar, items);
 		root.append(card);
 		document.body.appendChild(root);
+		if (window.matchMedia("(hover: hover)").matches) {
+			root.addEventListener("pointerenter", () => root.classList.add("is-open"));
+			root.addEventListener("pointerleave", () => {
+				if (state.drag || state.flyTimer) return;
+				root.classList.remove("is-open");
+			});
+		}
 		state.root = root;
 		state.list = items;
 		state.card = card;
@@ -2566,28 +2576,40 @@
 	}
 	function renderItems() {
 		ensureDom();
-		state.rows.forEach((row) => row.remove());
-		state.rows = [];
-		state.rowsByKey = new Map();
+		const nextRows = [];
+		const nextByKey = new Map();
+		let cursor = state.list.firstElementChild;
+		const place = (row) => {
+			nextRows.push(row);
+			nextByKey.set(row.dataset.key, row);
+			if (row === cursor) cursor = row.nextElementSibling;
+			else state.list.insertBefore(row, cursor);
+		};
 		state.entries.forEach((entry) => {
-			addRow(buildItemRow(entry));
-			if (entry.replies.length > 1) entry.replies.forEach((reply, index) => addRow(buildReplyRow(entry, reply, index)));
+			const row = state.rowsByKey.get(entry.key) || document.createElement("div");
+			fillItemRow(row, entry);
+			place(row);
+			if (entry.replies.length > 1) entry.replies.forEach((reply, index) => {
+				const replyRow = state.rowsByKey.get(reply.key) || document.createElement("div");
+				fillReplyRow(replyRow, entry, reply, index);
+				place(replyRow);
+			});
 		});
+		state.rows.forEach((row) => {
+			if (!nextByKey.has(row.dataset.key)) row.remove();
+		});
+		state.rows = nextRows;
+		state.rowsByKey = nextByKey;
 	}
-	function addRow(row) {
-		state.rows.push(row);
-		state.rowsByKey.set(row.dataset.key, row);
-		state.list.appendChild(row);
-	}
-	function buildItemRow(entry) {
+	function fillItemRow(row, entry) {
 		const showingAnswer = isShowingAnswer(entry);
 		const reply = selectedReply(entry);
-		const row = document.createElement("div");
-		row.className = "dscf-msgnav-item";
 		const active = entry.key === state.activeKey;
+		row.className = "dscf-msgnav-item";
 		row.classList.toggle("is-active", active);
 		row.classList.toggle("is-showing-answer", showingAnswer);
 		row.dataset.key = entry.key;
+		delete row.dataset.parentKey;
 		const jump = document.createElement("button");
 		jump.type = "button";
 		jump.className = "dscf-msgnav-jump";
@@ -2629,33 +2651,39 @@
 		answerRole.innerHTML = ANSWER_ICON;
 		if (entry.replies.length) answerRole.addEventListener("click", () => switchPreview(entry, true));
 		roles.append(questionRole, answerRole);
-		row.append(roles, jump, indicator);
-		row.addEventListener("click", (event) => {
+		row.replaceChildren(roles, jump, indicator);
+		row.onclick = (event) => {
 			if (event.target.closest(".dscf-msgnav-roles")) return;
 			if (entry.key !== state.activeKey) {
 				if (isShowingAnswer(entry)) jumpToReply(entry);
 				else jumpTo(entry);
 			} else if (entry.replies.length) switchPreview(entry, !isShowingAnswer(entry));
 			else jumpTo(entry);
-		});
-		return row;
+		};
 	}
-	function buildReplyRow(entry, reply, index) {
-		const row = document.createElement("div");
+	function fillReplyRow(row, entry, reply, index) {
 		row.className = "dscf-msgnav-item is-sub is-showing-answer";
 		row.classList.toggle("is-active", reply.key === state.activeKey);
 		row.dataset.key = reply.key;
 		row.dataset.parentKey = entry.key;
 		const roles = document.createElement("span");
 		roles.className = "dscf-msgnav-roles";
+		const answerRole = document.createElement("button");
+		answerRole.type = "button";
+		answerRole.className = "dscf-msgnav-role dscf-msgnav-role-answer";
+		answerRole.title = "跳到这条回答";
+		answerRole.setAttribute("aria-label", "跳到第 " + (index + 1) + " 条回答：" + (reply.text || "（无正文）"));
+		answerRole.setAttribute("aria-pressed", "true");
+		answerRole.innerHTML = ANSWER_ICON;
+		answerRole.addEventListener("click", () => openReply(entry, reply));
 		const order = document.createElement("span");
 		order.className = "dscf-msgnav-subindex";
 		order.textContent = String(index + 1);
-		roles.append(order);
+		roles.append(answerRole, order);
 		const jump = document.createElement("button");
 		jump.type = "button";
 		jump.className = "dscf-msgnav-jump";
-		jump.setAttribute("aria-label", "跳到回答 " + (index + 1) + "：" + (reply.text || "（无正文）"));
+		jump.setAttribute("aria-label", "跳到第 " + (index + 1) + " 条回答：" + (reply.text || "（无正文）"));
 		const preview = document.createElement("span");
 		preview.className = "dscf-msgnav-preview";
 		const answer = document.createElement("span");
@@ -2669,14 +2697,17 @@
 		const line = document.createElement("span");
 		line.className = "dscf-msgnav-line";
 		indicator.append(line);
-		row.append(roles, jump, indicator);
-		row.addEventListener("click", () => {
-			state.answerReply.set(entry.key, reply.key);
-			state.answerPreview.add(entry.key);
-			applyAnswerPreview(entry, true);
-			jumpToKey(reply.key, reply.el, reply.key, true);
-		});
-		return row;
+		row.replaceChildren(roles, jump, indicator);
+		row.onclick = (event) => {
+			if (event.target.closest(".dscf-msgnav-roles")) return;
+			openReply(entry, reply);
+		};
+	}
+	function openReply(entry, reply) {
+		state.answerReply.set(entry.key, reply.key);
+		state.answerPreview.add(entry.key);
+		applyAnswerPreview(entry, true);
+		jumpToKey(reply.key, reply.el, reply.key, true);
 	}
 	function syncEntryTexts() {
 		const entryByKey = new Map(state.entries.map((entry) => [entry.key, entry]));
@@ -2709,7 +2740,10 @@
 	}
 	function syncVisibility() {
 		if (!state.root) return;
-		state.root.classList.toggle("is-visible", !state.dismissed && state.entries.length >= MIN_ENTRIES);
+		if (state.entries.length >= MIN_ENTRIES) state.shown = true;
+		const visible = !state.dismissed && state.shown;
+		if (!visible) state.root.classList.remove("is-open");
+		state.root.classList.toggle("is-visible", visible);
 	}
 	function readNavPosition() {
 		const raw = storageGet(NAV_POSITION_KEY, "");
@@ -2801,6 +2835,7 @@
 		state.flyTimer = setTimeout(() => {
 			state.flyTimer = null;
 			state.root?.classList.remove("is-flying");
+			if (state.root && !state.root.matches(":hover")) state.root.classList.remove("is-open");
 		}, 320);
 	}
 	function startNavDrag(event) {
@@ -2878,6 +2913,8 @@
 		state.activeKey = null;
 		state.answerPreview.clear();
 		state.answerReply.clear();
+		state.shown = false;
+		syncVisibility();
 	}
 	function attachScroller(scroller) {
 		detachScroller();
@@ -2920,13 +2957,12 @@
 	function refreshMessageNav() {
 		const entries = mergePass(readPass());
 		if (entries.length < MIN_ENTRIES) {
-			clearMessageNav();
+			if (!state.items.length) clearMessageNav();
 			return;
 		}
 		const mounted = state.items.map((item) => item.el).filter((el) => el && el.isConnected);
 		const scroller = resolveScroller(mounted);
 		if (!scroller) {
-			clearMessageNav();
 			scheduleWatch();
 			return;
 		}
@@ -2996,6 +3032,7 @@
 		state.answerReply.clear();
 		identity = createIdentity();
 		state.dismissed = false;
+		state.shown = false;
 		state.position = null;
 		state.drag = null;
 		clearTimeout(state.flyTimer);
