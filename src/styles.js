@@ -457,6 +457,28 @@ export function addCSSClass() {
             display: none;
         }
 
+        /* [导航条目分组]：一个提问连同它的回答子条目编成一组；多条回答默认折叠，
+            展开面板后悬停整组（父行或子条目）或该组是当前条目时才展开，指针移开即收起。
+            收起成横线时不展开子条目，避免列表高度随滚动变化；连续多条提问仍各自一行 */
+        .dscf-msgnav-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .dscf-msgnav-group > .dscf-msgnav-item.is-sub {
+            display: none;
+        }
+
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-group:is(:hover, :focus-within, :has(> .dscf-msgnav-item.is-active)) > .dscf-msgnav-item.is-sub {
+            display: flex;
+        }
+
+        /* 收起时子条目不展开，当前读到某条回答就让它的提问行接管横线高亮，位置仍有指示 */
+        .dscf-msgnav:not(:hover):not(.is-open):not(.is-flying) .dscf-msgnav-group:has(> .dscf-msgnav-item.is-sub.is-active) > .dscf-msgnav-item:not(.is-sub) .dscf-msgnav-line {
+            background-color: var(--dscf-nav-active);
+            transform: scale(1.5);
+        }
+
         /* 一个提问下有多条独立回答时，每条回答单独占一行子条目：
            行首是序号（不是按钮，悬停才显形），文字直接显示该条回答的预览，
            点击切到这条回答并跳过去；行高比父条目矮一档，视觉上从属于上一问 */

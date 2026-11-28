@@ -185,6 +185,9 @@ const state = {
     list: null,
     rows: [],
     rowsByKey: new Map(),
+    // 每个提问连同它的回答子条目编成一组；列表面板里放的是分组而不是散行
+    groups: [],
+    groupsByKey: new Map(),
     activeKey: null,
     observer: null,
     onScroll: null,
@@ -846,47 +849,75 @@ function switchPreview(entry, showingAnswer) {
 }
 
 // 重画条目：按 key 复用已有行、只换内容，不在悬停中整列删除重建——
-// 站点重渲染触发刷新时，鼠标停着也不会丢 hover、面板不会反复收起
+// 站点重渲染触发刷新时，鼠标停着也不会丢 hover、面板不会反复收起。
+// 每个提问连同它的回答子条目包成一组：子条目默认在样式里折叠，悬停整组或组内为当前条目时展开，
+// 连续多条提问各占一行、各自折叠自己的回答
 function renderItems() {
     ensureDom();
 
     const nextRows = [];
     const nextByKey = new Map();
+    const nextGroups = [];
+    const nextGroupsByKey = new Map();
     let cursor = state.list.firstElementChild;
 
-    // 行按文档顺序排：已在正确位置就不动，其余插到游标前，等于原地移动元素而不销毁
-    const place = row => {
-        nextRows.push(row);
-        nextByKey.set(row.dataset.key, row);
-        if (row === cursor) {
-            cursor = row.nextElementSibling;
+    // 分组按文档顺序排：已在正确位置就不动，其余插到游标前，等于原地移动元素而不销毁
+    const placeGroup = group => {
+        nextGroups.push(group);
+        nextGroupsByKey.set(group.dataset.key, group);
+        if (group === cursor) {
+            cursor = group.nextElementSibling;
         } else {
-            state.list.insertBefore(row, cursor);
+            state.list.insertBefore(group, cursor);
         }
     };
 
+    // 组内行按顺序复用；条数变少时多出来的旧行（例如回答被撤回）一并移除
+    const fillGroup = (group, members) => {
+        members.forEach((row, index) => {
+            const existing = group.children[index];
+            if (existing !== row) group.insertBefore(row, existing || null);
+            nextRows.push(row);
+            nextByKey.set(row.dataset.key, row);
+        });
+        while (group.children.length > members.length) group.lastElementChild.remove();
+    };
+
     state.entries.forEach(entry => {
+        const group = state.groupsByKey.get(entry.key) || document.createElement('div');
+        group.className = 'dscf-msgnav-group';
+        group.dataset.key = entry.key;
+
         const row = state.rowsByKey.get(entry.key) || document.createElement('div');
         fillItemRow(row, entry);
-        place(row);
 
-        // 一个提问下有多条独立回答时，每条回答单独占一行子条目
+        const members = [row];
+
+        // 一个提问下有多条独立回答时，每条回答单独占一行子条目（默认折叠在提问行下）
         if (entry.replies.length > 1) {
             entry.replies.forEach((reply, index) => {
                 const replyRow = state.rowsByKey.get(reply.key) || document.createElement('div');
                 fillReplyRow(replyRow, entry, reply, index);
-                place(replyRow);
+                members.push(replyRow);
             });
         }
+
+        fillGroup(group, members);
+        placeGroup(group);
     });
 
-    // 条目消失（重新生成、切分支）才删行
+    // 条目消失（重新生成、切分支）才删行与分组
     state.rows.forEach(row => {
         if (!nextByKey.has(row.dataset.key)) row.remove();
+    });
+    state.groups.forEach(group => {
+        if (!nextGroupsByKey.has(group.dataset.key)) group.remove();
     });
 
     state.rows = nextRows;
     state.rowsByKey = nextByKey;
+    state.groups = nextGroups;
+    state.groupsByKey = nextGroupsByKey;
 }
 
 function fillItemRow(row, entry) {
@@ -1304,8 +1335,11 @@ function clearMessageNav() {
     state.topInset = 0;
     state.answerPreview.clear();
     state.rows.forEach(row => row.remove());
+    state.groups.forEach(group => group.remove());
     state.rows = [];
     state.rowsByKey = new Map();
+    state.groups = [];
+    state.groupsByKey = new Map();
     syncVisibility();
 }
 

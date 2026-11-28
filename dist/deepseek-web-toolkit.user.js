@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 修复+优化
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.28.1824
+// @version      2026.11.28.1836
 // @author       sherlocknieh
 // @description  优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。
 // @license      MIT
@@ -541,6 +541,28 @@
         /* 回答还没出现：答按钮不占位，问按钮旁边只留它自己 */
         .dscf-msgnav-role:disabled {
             display: none;
+        }
+
+        /* [导航条目分组]：一个提问连同它的回答子条目编成一组；多条回答默认折叠，
+            展开面板后悬停整组（父行或子条目）或该组是当前条目时才展开，指针移开即收起。
+            收起成横线时不展开子条目，避免列表高度随滚动变化；连续多条提问仍各自一行 */
+        .dscf-msgnav-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .dscf-msgnav-group > .dscf-msgnav-item.is-sub {
+            display: none;
+        }
+
+        .dscf-msgnav:is(:hover, .is-open, :has(:focus-visible), .is-flying) .dscf-msgnav-group:is(:hover, :focus-within, :has(> .dscf-msgnav-item.is-active)) > .dscf-msgnav-item.is-sub {
+            display: flex;
+        }
+
+        /* 收起时子条目不展开，当前读到某条回答就让它的提问行接管横线高亮，位置仍有指示 */
+        .dscf-msgnav:not(:hover):not(.is-open):not(.is-flying) .dscf-msgnav-group:has(> .dscf-msgnav-item.is-sub.is-active) > .dscf-msgnav-item:not(.is-sub) .dscf-msgnav-line {
+            background-color: var(--dscf-nav-active);
+            transform: scale(1.5);
         }
 
         /* 一个提问下有多条独立回答时，每条回答单独占一行子条目：
@@ -2159,6 +2181,8 @@
 		list: null,
 		rows: [],
 		rowsByKey: new Map(),
+		groups: [],
+		groupsByKey: new Map(),
 		activeKey: null,
 		observer: null,
 		onScroll: null,
@@ -2589,28 +2613,49 @@
 		ensureDom();
 		const nextRows = [];
 		const nextByKey = new Map();
+		const nextGroups = [];
+		const nextGroupsByKey = new Map();
 		let cursor = state.list.firstElementChild;
-		const place = (row) => {
-			nextRows.push(row);
-			nextByKey.set(row.dataset.key, row);
-			if (row === cursor) cursor = row.nextElementSibling;
-			else state.list.insertBefore(row, cursor);
+		const placeGroup = (group) => {
+			nextGroups.push(group);
+			nextGroupsByKey.set(group.dataset.key, group);
+			if (group === cursor) cursor = group.nextElementSibling;
+			else state.list.insertBefore(group, cursor);
+		};
+		const fillGroup = (group, members) => {
+			members.forEach((row, index) => {
+				const existing = group.children[index];
+				if (existing !== row) group.insertBefore(row, existing || null);
+				nextRows.push(row);
+				nextByKey.set(row.dataset.key, row);
+			});
+			while (group.children.length > members.length) group.lastElementChild.remove();
 		};
 		state.entries.forEach((entry) => {
+			const group = state.groupsByKey.get(entry.key) || document.createElement("div");
+			group.className = "dscf-msgnav-group";
+			group.dataset.key = entry.key;
 			const row = state.rowsByKey.get(entry.key) || document.createElement("div");
 			fillItemRow(row, entry);
-			place(row);
+			const members = [row];
 			if (entry.replies.length > 1) entry.replies.forEach((reply, index) => {
 				const replyRow = state.rowsByKey.get(reply.key) || document.createElement("div");
 				fillReplyRow(replyRow, entry, reply, index);
-				place(replyRow);
+				members.push(replyRow);
 			});
+			fillGroup(group, members);
+			placeGroup(group);
 		});
 		state.rows.forEach((row) => {
 			if (!nextByKey.has(row.dataset.key)) row.remove();
 		});
+		state.groups.forEach((group) => {
+			if (!nextGroupsByKey.has(group.dataset.key)) group.remove();
+		});
 		state.rows = nextRows;
 		state.rowsByKey = nextByKey;
+		state.groups = nextGroups;
+		state.groupsByKey = nextGroupsByKey;
 	}
 	function fillItemRow(row, entry) {
 		const showingAnswer = isShowingAnswer(entry);
@@ -2911,8 +2956,11 @@
 		state.topInset = 0;
 		state.answerPreview.clear();
 		state.rows.forEach((row) => row.remove());
+		state.groups.forEach((group) => group.remove());
 		state.rows = [];
 		state.rowsByKey = new Map();
+		state.groups = [];
+		state.groupsByKey = new Map();
 		syncVisibility();
 	}
 	function resetDiscovery() {
