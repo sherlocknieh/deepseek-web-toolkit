@@ -192,6 +192,8 @@ const state = {
     drag: null,
     // 松手后滑向边缘的定时器
     flyTimer: null,
+    // 卡片外壳（含顶栏）与条目容器分开：定位与拖动都按卡片量，条目上方还压着 28px 顶栏
+    card: null,
     bar: null
 };
 
@@ -542,8 +544,8 @@ function ensureDom() {
     root.className = 'dscf-msgnav';
     root.setAttribute(NAV_ATTR, '1');
 
-    const list = document.createElement('div');
-    list.className = 'dscf-msgnav-list';
+    const card = document.createElement('div');
+    card.className = 'dscf-msgnav-list';
 
     // [导航顶栏]: 展开后盖在列表上方，左端拖动把手、右端隐藏按钮；
     // 整条都是拖动区，拖动只改垂直位置，松手按指针所在半屏吸附左右边缘
@@ -571,13 +573,14 @@ function ensureDom() {
 
     const items = document.createElement('div');
     items.className = 'dscf-msgnav-items';
-    list.append(bar, items);
+    card.append(bar, items);
 
-    root.append(list);
+    root.append(card);
     document.body.appendChild(root);
 
     state.root = root;
     state.list = items;
+    state.card = card;
     state.bar = bar;
 }
 
@@ -815,7 +818,7 @@ function saveNavPosition() {
 
 // 卡片（展开后的 240 宽面板）横向夹在视口内；拖动与飞行都以卡片左侧坐标为基准
 function clampNavLeft(left) {
-    const width = state.list?.offsetWidth || 0;
+    const width = state.card?.offsetWidth || 0;
     return Math.min(Math.max(0, left), Math.max(0, window.innerWidth - width));
 }
 
@@ -829,15 +832,15 @@ function clampNavTop(top) {
 // 跨边时换镜像 class 但卡片本身仍停在 cardLeft，不跟着跳
 function positionNavCard(side, cardLeft, cardTop) {
     const root = state.root;
-    const list = state.list;
-    if (!root || !list) return;
+    const card = state.card;
+    if (!root || !card) return;
 
     root.classList.toggle('is-left', side === 'left');
     root.style.transform = 'none';
     root.style.right = 'auto';
     root.style.left = side === 'left'
         ? `${cardLeft}px`
-        : `${cardLeft + list.offsetWidth - root.offsetWidth}px`;
+        : `${cardLeft + card.offsetWidth - root.offsetWidth}px`;
     root.style.top = `${cardTop}px`;
 }
 
@@ -866,9 +869,9 @@ function keepNavInView() {
 // 松手后滑向吸附边：先在不带过渡的情况下把卡片摆到当前视觉位置（跨边时内容镜像
 // 立刻切换，卡片不跳），再开 transition 走到目标坐标，结束后清掉过渡交给逐帧拖动
 function flyNavTo(side, cardLeft, cardTop) {
-    if (!state.root || !state.list) return;
+    if (!state.root || !state.card) return;
 
-    const card = state.list.getBoundingClientRect();
+    const card = state.card.getBoundingClientRect();
     state.root.classList.remove('is-flying');
     positionNavCard(side, card.left, card.top);
     void state.root.offsetWidth;
@@ -889,7 +892,7 @@ function flyNavTo(side, cardLeft, cardTop) {
 // [导航顶栏] 拖动：按下记录指针与卡片的相对位置，超过阈值后卡片按指针双轴移动；
 // 松手按卡片中线所在半屏吸附左/右边缘并滑过去。事件挂到 window，指针移出胶囊也不丢
 function startNavDrag(event) {
-    if (event.button !== 0 || !state.root || !state.bar || !state.list) return;
+    if (event.button !== 0 || !state.root || !state.bar || !state.card) return;
     if (event.target.closest?.('.dscf-msgnav-close')) return;
 
     // 飞行途中再次按下：停在当前视觉位置，从半路接着拖
@@ -898,7 +901,7 @@ function startNavDrag(event) {
     state.root.classList.remove('is-flying');
 
     const side = state.position?.side === 'left' ? 'left' : 'right';
-    const card = state.list.getBoundingClientRect();
+    const card = state.card.getBoundingClientRect();
     positionNavCard(side, card.left, card.top);
 
     state.drag = {
@@ -943,9 +946,9 @@ function endNavDrag(event) {
         state.bar.releasePointerCapture(drag.pointerId);
     }
     stopNavDragListeners();
-    if (!drag.moved || !state.root || !state.list) return;
+    if (!drag.moved || !state.root || !state.card) return;
 
-    const width = state.list.offsetWidth;
+    const width = state.card.offsetWidth;
     // 取消（如系统手势打断）时留在原吸附边，不按可能为 0 的指针位置重算
     const side = event.type === 'pointercancel'
         ? drag.side
@@ -1103,6 +1106,7 @@ export function teardownMessageNav() {
     state.root?.remove();
     state.root = null;
     state.list = null;
+    state.card = null;
     state.bar = null;
     state.rows = [];
     state.entries = [];

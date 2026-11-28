@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek 修复+优化
 // @namespace    http://tampermonkey.net/
-// @version      2026.11.28.1528
+// @version      2026.11.28.1531
 // @author       sherlocknieh
 // @description  优化 DeepSeek 网页端使用体验: KaTeX 公式复制修正 + 会话文件夹 + 消息导航 + 默认折叠思考。
 // @license      MIT
@@ -2115,6 +2115,7 @@
 		position: null,
 		drag: null,
 		flyTimer: null,
+		card: null,
 		bar: null
 	};
 	function readText(el) {
@@ -2334,8 +2335,8 @@
 		const root = document.createElement("div");
 		root.className = "dscf-msgnav";
 		root.setAttribute(NAV_ATTR, "1");
-		const list = document.createElement("div");
-		list.className = "dscf-msgnav-list";
+		const card = document.createElement("div");
+		card.className = "dscf-msgnav-list";
 		const bar = document.createElement("div");
 		bar.className = "dscf-msgnav-bar";
 		const grip = document.createElement("span");
@@ -2355,11 +2356,12 @@
 		bar.addEventListener("pointerdown", startNavDrag);
 		const items = document.createElement("div");
 		items.className = "dscf-msgnav-items";
-		list.append(bar, items);
-		root.append(list);
+		card.append(bar, items);
+		root.append(card);
 		document.body.appendChild(root);
 		state.root = root;
 		state.list = items;
+		state.card = card;
 		state.bar = bar;
 	}
 	var QUESTION_ICON = "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\"><circle cx=\"8\" cy=\"8\" r=\"6.2\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\"/><path d=\"M6.1 6.2a1.9 1.9 0 1 1 2.6 1.8c-.45.2-.7.5-.7 1v.2\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\" stroke-linecap=\"round\"/><circle cx=\"8\" cy=\"11.1\" r=\".75\" fill=\"currentColor\"/></svg>";
@@ -2501,7 +2503,7 @@
 		if (state.position) storageSet(NAV_POSITION_KEY, JSON.stringify(state.position));
 	}
 	function clampNavLeft(left) {
-		const width = state.list?.offsetWidth || 0;
+		const width = state.card?.offsetWidth || 0;
 		return Math.min(Math.max(0, left), Math.max(0, window.innerWidth - width));
 	}
 	function clampNavTop(top) {
@@ -2510,12 +2512,12 @@
 	}
 	function positionNavCard(side, cardLeft, cardTop) {
 		const root = state.root;
-		const list = state.list;
-		if (!root || !list) return;
+		const card = state.card;
+		if (!root || !card) return;
 		root.classList.toggle("is-left", side === "left");
 		root.style.transform = "none";
 		root.style.right = "auto";
-		root.style.left = side === "left" ? `${cardLeft}px` : `${cardLeft + list.offsetWidth - root.offsetWidth}px`;
+		root.style.left = side === "left" ? `${cardLeft}px` : `${cardLeft + card.offsetWidth - root.offsetWidth}px`;
 		root.style.top = `${cardTop}px`;
 	}
 	function applyNavPosition(position) {
@@ -2537,8 +2539,8 @@
 		});
 	}
 	function flyNavTo(side, cardLeft, cardTop) {
-		if (!state.root || !state.list) return;
-		const card = state.list.getBoundingClientRect();
+		if (!state.root || !state.card) return;
+		const card = state.card.getBoundingClientRect();
 		state.root.classList.remove("is-flying");
 		positionNavCard(side, card.left, card.top);
 		state.root.offsetWidth;
@@ -2556,13 +2558,13 @@
 		}, 320);
 	}
 	function startNavDrag(event) {
-		if (event.button !== 0 || !state.root || !state.bar || !state.list) return;
+		if (event.button !== 0 || !state.root || !state.bar || !state.card) return;
 		if (event.target.closest?.(".dscf-msgnav-close")) return;
 		clearTimeout(state.flyTimer);
 		state.flyTimer = null;
 		state.root.classList.remove("is-flying");
 		const side = state.position?.side === "left" ? "left" : "right";
-		const card = state.list.getBoundingClientRect();
+		const card = state.card.getBoundingClientRect();
 		positionNavCard(side, card.left, card.top);
 		state.drag = {
 			pointerId: event.pointerId,
@@ -2598,8 +2600,8 @@
 		state.root?.classList.remove("is-dragging");
 		if (state.bar?.hasPointerCapture?.(drag.pointerId)) state.bar.releasePointerCapture(drag.pointerId);
 		stopNavDragListeners();
-		if (!drag.moved || !state.root || !state.list) return;
-		const width = state.list.offsetWidth;
+		if (!drag.moved || !state.root || !state.card) return;
+		const width = state.card.offsetWidth;
 		const side = event.type === "pointercancel" ? drag.side : drag.cardLeft + width / 2 < window.innerWidth / 2 ? "left" : "right";
 		const maxLeft = Math.max(0, window.innerWidth - width);
 		flyNavTo(side, side === "left" ? Math.min(NAV_EDGE, maxLeft) : Math.max(0, maxLeft - NAV_EDGE), clampNavTop(drag.cardTop));
@@ -2722,6 +2724,7 @@
 		state.root?.remove();
 		state.root = null;
 		state.list = null;
+		state.card = null;
 		state.bar = null;
 		state.rows = [];
 		state.entries = [];
